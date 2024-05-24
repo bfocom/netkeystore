@@ -21,15 +21,16 @@ import com.sun.net.httpserver.*;
 
 class Server {
 
-    private static final boolean DEBUG = false;
-    private Engine engine;
+    private final boolean debug;
+    private final Engine engine;
+    private final Json config, shares;
     private HttpServer htserver;
-    private Json config, shares;
 
     Server(Engine engine, Json config) {
         this.engine = engine;
         this.config = config;
         this.shares = config.get("shares");
+        debug = config.booleanValue("debug");
     }
 
     int start(int port, boolean secure, String path) throws IOException {
@@ -68,7 +69,7 @@ class Server {
                 InputStream in = exchange.getRequestBody();
                 Json req = Json.readCbor(in);
                 in.close();
-                if (DEBUG) System.out.println("RX /list-v1: " + req);
+                if (debug) System.out.println("# RX /list-v1: " + req);
                 KeyStore.ProtectionParameter prot = null;
                 if (req.isList("auth")) {
                     Json auth = req.get("auth");
@@ -152,7 +153,7 @@ class Server {
                 e.printStackTrace(new PrintWriter(sb, true));
                 res.put("trace", sb.toString());
             } finally {
-                if (DEBUG) System.out.println("TX /list-v1: " + res);
+                if (debug) System.out.println("# TX /list-v1: " + res);
                 byte[] cbor = res.toCbor().array();
                 exchange.getResponseHeaders().set("Content-Type", "application/cbor");
                 exchange.sendResponseHeaders(200, cbor.length);
@@ -170,7 +171,7 @@ class Server {
                 // output format is { "signature": bytes }
                 InputStream in = exchange.getRequestBody();
                 Json req = Json.readCbor(in);
-                if (DEBUG) System.out.println("RX /sign-v1: " + req);
+                if (debug) System.out.println("# RX /sign-v1: " + req);
                 in.close();
                 String keyname = req.stringValue("key");
                 ByteBuffer buffer = req.bufferValue("digest");
@@ -260,7 +261,7 @@ class Server {
                                         sig = Signature.getInstance(sigalg, provider);
                                     } catch (NoSuchAlgorithmException ex) {
                                         provider = null;
-                                        sig = Signature.getInstance(sigalg + keyalg);
+                                        sig = Signature.getInstance(sigalg);
                                     }
                                     if (req.isBuffer("params") && algorithmParameterSpecClass != null) {
                                         AlgorithmParameters ap = provider == null ? AlgorithmParameters.getInstance(sigalg) : AlgorithmParameters.getInstance(sigalg, provider);
@@ -322,7 +323,7 @@ class Server {
                 e.printStackTrace(new PrintWriter(sb, true));
                 res.put("trace", sb.toString());
             } finally {
-                if (DEBUG) System.out.println("TX /sign-v1: " + res);
+                if (debug) System.out.println("# TX /sign-v1: " + res);
                 byte[] cbor = res.toCbor().array();
                 exchange.getResponseHeaders().set("Content-Type", "application/cbor");
                 exchange.sendResponseHeaders(200, cbor.length);

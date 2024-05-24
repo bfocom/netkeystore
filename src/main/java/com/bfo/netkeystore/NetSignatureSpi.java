@@ -77,12 +77,11 @@ public class NetSignatureSpi extends SignatureSpi {
 
     protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
         engineInitSign(privateKey, null);
-
     }
 
     protected void engineInitSign(PrivateKey privateKey, SecureRandom random) throws InvalidKeyException {
         if (!(privateKey instanceof NetPrivateKey)) {
-            throw new InvalidKeyException("Key is " + privateKey.getClass().getName());
+            throw new InvalidKeyException("Key is " + (privateKey == null ? "null" : privateKey.getClass().getName()));
         }
         String keyAlgo = privateKey.getAlgorithm();
         if (!sigAlgo.equals(keyAlgo)) {
@@ -93,7 +92,6 @@ public class NetSignatureSpi extends SignatureSpi {
                 throw new InvalidKeyException("Key is not suitable for " + sigAlgo);
             }
         }
-        this.verifySignature = null;
         this.privateKey = (NetPrivateKey)privateKey;
         if (this.digest != null) {
             this.digest.reset();
@@ -105,8 +103,6 @@ public class NetSignatureSpi extends SignatureSpi {
     protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
         this.verifySignature.initVerify(publicKey);
         this.privateKey = null;
-        this.digest = null;
-        this.noneDigest = null;
     }
 
     /**
@@ -130,7 +126,7 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     protected void engineUpdate(byte b) throws SignatureException {
-        if (verifySignature != null) {
+        if (privateKey == null) {
             verifySignature.update(b);
         } else if (digest != null) {
             digest.update(b);
@@ -142,7 +138,7 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     protected void engineUpdate(byte[] b, int off, int len) throws SignatureException {
-        if (verifySignature != null) {
+        if (privateKey == null) {
             verifySignature.update(b, off, len);
         } else if (digest != null) {
             digest.update(b, off, len);
@@ -154,7 +150,7 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     protected void engineUpdate(ByteBuffer input) {
-        if (verifySignature != null) {
+        if (privateKey == null) {
             try {
                 verifySignature.update(input);
             } catch (SignatureException e) {
@@ -174,7 +170,7 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     protected boolean engineVerify(byte[] b, int off, int len) throws SignatureException {
-        if (verifySignature != null) {
+        if (privateKey != null) {
             throw new SignatureException("Not initialized for verifying");
         } else {
             return verifySignature.verify(b, off, len);

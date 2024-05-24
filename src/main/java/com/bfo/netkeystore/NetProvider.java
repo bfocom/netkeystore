@@ -42,7 +42,6 @@ public class NetProvider extends Provider {
     synchronized Engine getEngine() {
         if (engine == null) {
             engine = new Engine();
-            new Exception().printStackTrace();
             try {
                 engine.load(null);
             } catch (IOException e) {}

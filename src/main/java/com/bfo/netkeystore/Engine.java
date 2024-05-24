@@ -22,6 +22,7 @@ class Engine {
 
     private static final String SERVICE = "_netkeystore._tcp";
     private Zeroconf zc;
+    private boolean debug;
     private Service service;
     private String name;
     private Server server;
@@ -80,7 +81,7 @@ class Engine {
     }
 
     private boolean addRemoteNode(String name, String fqdn, InetSocketAddress address, Map<String,String> properties) {
-        System.out.println("#add: name="+name);
+        if (debug) System.out.println("# Added server name=\"" + name + "\" address=\"" + address + "\"");
         RemoteSupplier supplier = new RemoteSupplier(this, name, fqdn, address, properties);
         if (remoteSuppliers.putIfAbsent(name, supplier) == null) {
             return true;
@@ -101,11 +102,10 @@ class Engine {
 
     void load(InputStream in) throws IOException {
         if (in == null) {
-            in = new ByteArrayInputStream("{}".getBytes("UTF-8"));
+            config = Json.read("{}");
+        } else {
+            config = Json.read(new YamlReader().setInput(in));
         }
-        // server:{ announce: false, port: 0, "share":[{ "type":"pkcs11", "library":"...", "slotIndex":"" }] },
-        // client:{ }
-        config = Json.read(new YamlReader().setInput(in));
         Json server = null, client = null;
         boolean serverAnnounce = false, clientSearch = false;
         name = config.stringValue("name");
@@ -115,24 +115,22 @@ class Engine {
         if (config.isMap("server")) {
             server = config.get("server");
             int port = 0;
-            if (server.has("port")) {
-                if (server.numberValue("port") instanceof Integer) {
-                    port = server.intValue("port");
-                    if (port < 0 || port > 65535) {
-                        throw new IllegalArgumentException("Invalid port " + port);
-                    }
-                } else {
-                    throw new IllegalArgumentException("Invalid port " + server.get("port"));
+            if (server.isNumber("port") && server.numberValue("port") instanceof Integer) {
+                port = server.intValue("port");
+                if (port < 0 || port > 65535) {
+                    throw new IllegalArgumentException("Invalid port " + port);
                 }
+            } else {
+                throw new IllegalArgumentException("Invalid port " + server.get("port"));
             }
-            if (!server.isBoolean("announce") || server.booleanValue("announce")) {
+            if (!server.isBoolean("zeroconf") || server.booleanValue("zeroconf")) {
                 serverAnnounce = true;
             }
             if (serverAnnounce && zc == null) {
                 zc = new Zeroconf();
             }
             this.server = new Server(this, server);
-            boolean secure = false;
+            boolean secure = false;      // TODO
             String path = null;
             port = this.server.start(port, secure, path);
             System.out.println("Listening on port " + port);
@@ -150,19 +148,46 @@ class Engine {
         }
 
         if (config.isMap("client") || server == null) {
-            clientSearch = true;
-            /*
             client = config.get("client");
-            if (client.isString("server")) {
-                // TODO
-                clientSearch = false;
+            clientSearch = true;
+            if (client != null) {
+                debug = client.booleanValue("debug");
+                if (client.isMap("servers")) {
+                    for (Map.Entry<Object,Json> e : client.get("servers").mapValue().entrySet()) {
+                        if (e.getValue().isString()) {
+                            String name = e.getKey().toString();
+                            String s = e.getValue().stringValue();
+                            try {
+                                URI uri = new URI(s);
+                                boolean secure;
+                                Map<String,String> props = new HashMap<String,String>();
+                                if (uri.getScheme().equals("https")) {
+                                    props.put("secure", "true");
+                                } else if (!uri.getScheme().equals("http")) {
+                                    throw new IOException("Invalid server URL \"" + s + "\": not http or https");
+                                }
+                                InetSocketAddress address = new InetSocketAddress(uri.getHost(), uri.getPort());
+                                props.put("path", uri.getPath());
+                                addRemoteNode(name, uri.getHost(), address, props);
+                                clientSearch = false;
+                            } catch (URISyntaxException e2) {
+                                throw new IOException("Invalid server URL \"" + s + "\": bad URL");
+                            } catch (Exception e2) {
+                                throw new IOException("Invalid server URL \"" + s + "\"", e2);
+                            }
+                        } else {
+                            throw new IOException("client.servers." + e.getKey() + " is not a map");
+                        }
+                    }
+                } else if (!client.isNull("client.servers")) {
+                    throw new IOException("client.servers is not a map");
+                }
             }
-            */
             if (clientSearch && zc == null) {
                 zc = new Zeroconf();
+                initializedAfter = System.currentTimeMillis() + 1000;   // Takes a bit for servers to announce
             }
             startClient(clientSearch);
-            initializedAfter = System.currentTimeMillis() + 1000;
         } else {
             initializedAfter = System.currentTimeMillis();;
         }
@@ -282,8 +307,8 @@ class Engine {
 
         HttpURLConnection con = null;
         try {
-            System.out.println("TX /list-v1: " + req);
             con = supplier.getURLConnection("/list-v1");
+            if (debug) System.out.println("# TX " + con.getURL() + ": " + req);
             OutputStream out = con.getOutputStream();
             req.write(new CborWriter().setOutput(out));
             out.close();
@@ -293,20 +318,20 @@ class Engine {
                 InputStream in = con.getInputStream();
                 res = Json.readCbor(in);
                 in.close();
-                System.out.println("RX /list-v1: " + res);
+                if (debug) System.out.println("# RX " + con.getURL() + ": " + res);
                 String type = res.stringValue("type");
                 if ("auth".equals(type) && res.isList("auth") && callbackHandler != null) {
                     con.disconnect();
                     processCallbacks(req, res.get("auth"), callbackHandler);
-                    System.out.println("TX /list-v1: " + req);
                     con = supplier.getURLConnection("/list-v1");
+                    if (debug) System.out.println("# TX " + con.getURL() + ": " + req);
                     out = con.getOutputStream();
                     req.write(new CborWriter().setOutput(out));
                     out.close();
                     if (con.getResponseCode() == 200) {
                         in = con.getInputStream();
                         res = Json.readCbor(in);
-                        System.out.println("RX /list-v1: " + res);
+                        if (debug) System.out.println("# RX " + con.getURL() + ": " + res);
                         in.close();
                         type = res.stringValue("type");
                     }
@@ -406,7 +431,7 @@ class Engine {
         HttpURLConnection con = null;
         try {
             con = supplier.getURLConnection("/sign-v1");
-            System.out.println("TX /sign-v1: " + req);
+            if (debug) System.out.println("# TX " + con.getURL() + ": " + req);
             OutputStream out = con.getOutputStream();
             req.write(new CborWriter().setOutput(out));
             out.close();
@@ -415,13 +440,13 @@ class Engine {
                 InputStream in = con.getInputStream();
                 res = Json.readCbor(in);
                 in.close();
-                System.out.println("RX /sign-v1: " + res);
+                if (debug) System.out.println("# RX " + con.getURL() + ": " + res);
                 String type = res.stringValue("type");
                 if ("auth".equals(type) && res.isList("auth") && callbackHandler != null) {
                     processCallbacks(req, res.get("auth"), callbackHandler);
                     con.disconnect();
-                    System.out.println("TX /sign-v1: " + req);
                     con = supplier.getURLConnection("/sign-v1");
+                    if (debug) System.out.println("# TX " + con.getURL() + ": " + req);
                     out = con.getOutputStream();
                     req.write(new CborWriter().setOutput(out));
                     out.close();
@@ -429,6 +454,7 @@ class Engine {
                         in = con.getInputStream();
                         res = Json.readCbor(in);
                         System.out.println("RX /sign-v1: " + res);
+                        if (debug) System.out.println("# RX " + con.getURL() + ": " + res);
                         in.close();
                         type = res.stringValue("type");
                     }
