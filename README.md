@@ -120,11 +120,11 @@ Content-type: application/cbor
   "digest": "zQDiksWXDTxeLw_6UXHlVbxGv8T63ftKQYtoQLhueaM",
   "auth":[
     {
-      "type": "secret",
+      "type": "password",
       "for": "ks1",
       "password": "secret"
     }, {
-      "type": "secret",
+      "type": "password",
       "for": "ks1.eckey",
       "password": "secret"
     }
