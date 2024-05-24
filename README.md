@@ -76,10 +76,9 @@ Objects are sent as CBOR, but shown in their JSON equivalents below. Private key
 minus any private information (the minimum required fields are just "kty" and "x5c")
 
 
-```
+```http
 POST /list-v1
 Content-type: application/cbor
-
 {
   "auth":[
     {
@@ -92,7 +91,6 @@ Content-type: application/cbor
 
 HTTP/1.1 200 OK
 Content-type: application/cbor
-
 {
   "type":"list-v1",
   "keys":{
@@ -115,7 +113,6 @@ Content-type: application/cbor
 
 POST /sign-v1
 Content-type: application/cbor
-
 {
   "key": "ks1.eckey",
   "sig_alg": "ECDSA",
@@ -136,7 +133,6 @@ Content-type: application/cbor
 
 HTTP/1.1 200 OK
 Content-type: application/cbor
-
 {
   "type": "sign-v1",
   "signature": "MEQCIGLK9crNtoHSiCl4nDN-Z7F_ZdmF4uMANnGOY1a6xmOXAiBUdANsOFk5VBQqdL0MY4f9aiz2JVaAdijsqPeeOdwBXg"
