@@ -71,4 +71,74 @@ sig.update(data);
 byte[] sigbytes = sig.sign();
 ```
 
-The network protocol is intentionally trivial - it would be easy to build a client in another language
+The network protocol is intentionally trivial, with the intent it's easy to build a client in any language.
+Objects are sent as CBOR, but shown in their JSON equivalents below. Private keys are serialized as JWK format,
+minus any private information (the minimum required fields are just "kty" and "x5c")
+
+
+```
+POST /list-v1
+Content-type: application/cbor
+
+{
+  "auth":[
+    {
+      "type":"password",
+      "password":"secret"
+    }
+  ]
+}
+
+
+HTTP/1.1 200 OK
+Content-type: application/cbor
+
+{
+  "type":"list-v1",
+  "keys":{
+    "ks1.eckey":{
+      "kty": "EC",
+      "alg": "ES256",
+      "crv": "P-256",
+      "x5c":["MIIB9zCCAZygAwIBAgIJAMmeEVyfIStoMAoGCCqGSM49BAMCMG8xCzAJBgNVBAYTAlpaMRAwDgYDVQQIEwdVbmtub3duMRIwEAYDVQQHEwlUZXN0dmlsbGUxEjAQBgNVBAoTCVRlc3QgQ29ycDEQMA4GA1UECxMHVW5rbm93bjEUMBIGA1UEAxMLVGVzdCBUZXN0ZXIwHhcNMjQwNTI0MTgwMzIxWhcNMzQwNTIyMTgwMzIxWjBvMQswCQYDVQQGEwJaWjEQMA4GA1UECBMHVW5rbm93bjESMBAGA1UEBxMJVGVzdHZpbGxlMRIwEAYDVQQKEwlUZXN0IENvcnAxEDAOBgNVBAsTB1Vua25vd24xFDASBgNVBAMTC1Rlc3QgVGVzdGVyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPVcUCbKebWjIYKwqwqiYvk7sfBc9KbIx1CoqWoSOsvbzrnwPgJK0-m5k-2Q-WrNyTrtVNHjXEBA1u5ACpBAGpaMhMB8wHQYDVR0OBBYEFA24mgMJaN5xWNERjVL98Il3EVpLMAoGCCqGSM49BAMCA0kAMEYCIQDJqRxNZBJEfXWfcjCmWS2PcNRjNdeWEsEY_dzxYm5UvwIhAOIbbHh1siJRxgNt0wR6su0RLFlFRcBikm3Cx7cwTfG2"
+     ]
+   },
+   "ks2.rsakey": {
+     "kty": "RSA",
+     "n":"AJ8p18rv4Kl2U8EUxWr5lz72HFM6KS_OyYnsJfAlL2Hm8FNN7ZLTmWpNF5CQSXSEu_ilQN-Lb3M9ZF5OT0hWJbpIldsyu1feiC1z4caWEB9s5MCQhget4jMERIThlRwYc2I0titRR1MQt3Dzmleab2v9e7vcIZrz1sMw1JPI2Q7TKveEkMf5pFHwpY6PIGIe3_zNT4PPEQJEIr5udDEksY-OUiQeSh3P4DbkmTGxFABwcA93VosUpwtzv_0QApNVANkAhNsQx7OmQ1HxLzLkXHOe7zdwVBZDzedGc4-B4gtVjzl6dwVv542jLE36bd2aKEeioXlIDzRxZC0ANE9nv5s",
+     "e":"AQAB",
+     "x5c":["MIIDgTCCAmmgAwIBAgIILd4t_grn9wowDQYJKoZIhvcNAQELBQAwbzELMAkGA1UEBhMCWloxEDAOBgNVBAgTB1Vua25vd24xEjAQBgNVBAcTCVRlc3R2aWxsZTESMBAGA1UEChMJVGVzdCBDb3JwMRAwDgYDVQQLEwdVbmtub3duMRQwEgYDVQQDEwtUZXN0IFRlc3RlcjAeFw0yNDA1MjQxODA0MDFaFw0zNDA1MjIxODA0MDFaMG8xCzAJBgNVBAYTAlpaMRAwDgYDVQQIEwdVbmtub3duMRIwEAYDVQQHEwlUZXN0dmlsbGUxEjAQBgNVBAoTCVRlc3QgQ29ycDEQMA4GA1UECxMHVW5rbm93bjEUMBIGA1UEAxMLVGVzdCBUZXN0ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCfKdfK7-CpdlPBFMVq-Zc-9hxTOikvzsmJ7CXwJS9h5vBTTe2S05lqTReQkEl0hLv4pUDfi29zPWReTk9IViW6SJXbMrtX3ogtc-HGlhAfbOTAkIYHreIzBESE4ZUcGHNiNLYrUUdTELdw85pXmm9r_Xu73CGa89bDMNSTyNkO0yr3hJDH-aRR8KWOjyBiHt_8zU-DzxECRCK-bnQxJLGPjlIkHkodz-A25JkxsRQAcHAPd1aLFKcLc7_9EAKTVQDZAITbEMezpkNR8S8y5Fxznu83cFQWQ83nRnOPgeILVY85encFb-eNoyxN-m3dmihHoqF5SA80cWQtADRPZ7-bAgMBAAGjITAfMB0GA1UdDgQWBBQi1SStxcO_fC-gPDCfi4LydNRNnjANBgkqhkiG9w0BAQsFAAOCAQEAPyEIi0dGPLNt52z4laj_aFbYbz2dQKNRbZzu_a5OWuuxlIYafcB1RzEqbe3lXIA4448aAneOpUUpmtlFjM_lzLm1A1F8Hs7uzhrp64TL79fwEaeGxE5-y_KgE23Pnoee8kWV-VdG-1yRxQ79pLB1rVci675qr8DJBFHniaWXZPkKv7jJpxcVT1WqlrlNoNiRrT1K62I9byZ8QRFHfzPARN1eO7SgHxfkHDb3lrXp9nsG_kNybfJN769y5sC-Wsfdtv5FS6VF2jpSXBh-mxrg3xKsJ7e9JrGymoJABssPNdSKvgeJf56molYS8YgdCKp_LJXV_30DPiZRZ3rlFOgPsg"]
+    }
+  }
+}
+
+
+POST /sign-v1
+Content-type: application/cbor
+
+{
+  "key": "ks1.eckey",
+  "sig_alg": "ECDSA",
+  "digest_alg": "SHA256",
+  "digest": "zQDiksWXDTxeLw_6UXHlVbxGv8T63ftKQYtoQLhueaM",
+  "auth":[
+    {
+      "type": "secret",
+      "for": "ks1",
+      "password": "secret"
+    }, {
+      "type": "secret",
+      "for": "ks1.eckey",
+      "password": "secret"
+    }
+  ]
+}
+
+HTTP/1.1 200 OK
+Content-type: application/cbor
+
+{
+  "type": "sign-v1",
+  "signature": "MEQCIGLK9crNtoHSiCl4nDN-Z7F_ZdmF4uMANnGOY1a6xmOXAiBUdANsOFk5VBQqdL0MY4f9aiz2JVaAdijsqPeeOdwBXg"
+}
+```
