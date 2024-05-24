@@ -22,6 +22,8 @@ The client is also Java, and consists of a `java.security.Provider` providing a 
 for use with signing. Zero configuration really applies here; any servers on the network are foundautomatically and combined
 into one KeyStore.
 
+### Building and testing
+
 There are two dependencies: JSON and Zeroconf libraries, both written by BFO and included in the "lib" folder,
 so building is as simple as running `ant`. A single `netkeystore-1.0.jar` file is generated in `dist`
 
