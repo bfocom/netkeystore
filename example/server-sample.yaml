@@ -1,0 +1,20 @@
+# A YAML Configuration file demonstrating how to share two PKCS#12 based
+# keystores over the network. More than one "share" can be specified.
+ 
+server:
+  #debug: true
+  name: "Example server"          # The service name (default: derived from hostname)
+  port: 0                         # The port, or 0 for auto (default: 0)
+  zeroconf: true                  # Announce the service using zeroconf (default: true)
+  shares:
+    ks1:
+      type: pkcs12
+      path: "ectest.pkcs12"       # ... which contains a key called "eckey"
+      local_password: "password"  # The actual password for the keystore
+      remote_password: "secret"   # The password the remote user must enter
+    ks2:
+      type: pkcs12
+      path: "rsatest.pkcs12"      # .. which contains a key called "rsakey"
+      local_password: "password"
+      remote_password: "secret"
+

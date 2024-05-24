@@ -1,0 +1,11 @@
+# A YAML Configuration file demonstrating how to configure a client.
+#
+# This is OPTIONAL - the default will search for keys on the network
+# using Zeroconf
+ 
+client:
+  # debug: true
+  # A list of servers. If none are specified, they will be discovered with zeroconf
+  servers:
+    myserver: "https://localhost:9876/"
+

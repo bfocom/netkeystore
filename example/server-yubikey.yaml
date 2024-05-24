@@ -1,0 +1,21 @@
+# A YAML Configuration file demonstrating how to share a PKCS#11 based
+# HSM over the network. This works for Yubikey devices on macOS and Linux.
+ 
+server:
+  shares:
+    yubikey:
+      type: pkcs11
+      # The "library", "slot", "slotListIndex" etc properties are what
+      # you'd normally put in the PKCS#11 configuration file used by Java.
+      libary: "/usr/local/lib/libykcs11.dylib"
+
+      # Yubikeys will lock after too many failed attempts, so we definitely
+      # recommend specifing a local_password and remote_password so that
+      # failed attempts are never passed to the device. "123456" is the
+      # default for Yubikeys.
+      local_password: "123456"
+      remote_password: "password"
+
+  aliases:
+    # Optional "aliases" section lets you rename keys
+    "yubikey.X.509 Certificate for PIV Authentication": "mykey"
