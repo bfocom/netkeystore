@@ -18,8 +18,8 @@ This project turns a local KeyStore into a network KeyStore. It has three aspect
 The server is written in Java and is tested with Yubikey FIPS 5 tokens, but should with with any PKCS#11 based HSM
 that can be used with Java (and also with software keystores like PKCS#12 files).
 
-The client is also Java, and consists of a `java.security.Provider` providing a `java.security.KeyStore`
-for use with signing. Zero configuration really applies here; any servers on the network are foundautomatically and combined
+The client is also Java, and consists of a `java.security.Provider` providing a `java.security.KeyStore`.
+Zero configuration really applies here; any servers on the network are foundautomatically and combined
 into one KeyStore.
 
 ### Building and testing
@@ -70,6 +70,8 @@ sig.initSign(privkey);
 sig.update(data);
 byte[] sigbytes = sig.sign();
 ```
+
+## Network protocol
 
 The network protocol is intentionally trivial, with the intent it's easy to build a client in any language.
 Objects are sent as CBOR, but shown in their JSON equivalents below. Private keys are serialized as JWK format,
@@ -138,3 +140,17 @@ Content-type: application/cbor
   "signature": "MEQCIGLK9crNtoHSiCl4nDN-Z7F_ZdmF4uMANnGOY1a6xmOXAiBUdANsOFk5VBQqdL0MY4f9aiz2JVaAdijsqPeeOdwBXg"
 }
 ```
+
+Zeroconf is used to advertise the services, using the `_netkeystore._tcp` service name. The TXT record may contain
+`secure=true` to state the server uses HTTPS, and a `path=/prefix` property to add a prefix for HTTP requests.
+
+## TODO
+
+This is a very new project, but is working as described above. Supported are all signature algorithms of the form HASHwithKEY,
+where "HASH" is one of SHA224, SHA256, SHA384, SHA512, SHA3-224, SHA3-256, SHA3-384 and SHA3-512 and "KEY" is "RSA" or "ECDSA".
+
+Todo are:
+
+* Add HTTPS to the HTTP server (quite important!)
+* Add RSAPSS, Ed25519 and Ed448
+* Proof of concept in another language would be nice
