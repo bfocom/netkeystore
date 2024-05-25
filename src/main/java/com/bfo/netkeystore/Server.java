@@ -185,7 +185,7 @@ class Server {
                     err = "key \"" + keyname + "\" not found";
                     for (Map.Entry<Object,Json> e : shares.mapValue().entrySet()) {
                         final String storeName = e.getKey().toString();
-                        final Json config = e.getValue();
+                        final Json ksconfig = e.getValue();
                         if (keyname.startsWith(storeName + ".")) {
                             err = "Key \"" + keyname + "\" not found in store";
                             keyname = keyname.substring(storeName.length() + 1);
@@ -217,7 +217,7 @@ class Server {
                             }
                             KeyStore keystore = null;
                             try {
-                                keystore = loadLocalKeyStore(config, storeProt);            // This can't be cached!
+                                keystore = loadLocalKeyStore(ksconfig, storeProt);            // This can't be cached!
                             } catch (UnrecoverableKeyException ex) {
                                 auth = Json.read("[]");
                                 Json j = Json.read("{}");
@@ -230,7 +230,7 @@ class Server {
                             if (keystore != null) {
                                 KeyStore.Entry entry = null;
                                 try {
-                                    entry = keystore.getEntry(keyname, keyProt != null ? keyProt : storeProt);
+                                    entry = keystore.getEntry(keyname, getPasswordProtection(ksconfig, keyProt != null ? keyProt : storeProt));
                                 } catch (UnrecoverableKeyException ex) {
                                     err = "auth";
                                     auth = Json.read("[]");
@@ -337,8 +337,6 @@ class Server {
         try {
             String type = config.stringValue("type");
             String path = config.stringValue("path");
-            final char[] configLocalPassword = config.has("local_password") ? config.stringValue("local_password").toCharArray() : null;     // Password to access KeyStore
-            final char[] configRemotePassword = config.has("remote_password") ? config.stringValue("remote_password").toCharArray() : null;  // Password to be entered remotely
             String providerName = config.stringValue("provider");
             Provider provider = null;
             if ("pkcs11".equals(type)) {
@@ -379,36 +377,7 @@ class Server {
                 }
             }
 
-            // This passwordProtection converts any callback supplied to this method to a password protection,
-            // and converts from the "remote_password" to the "local_password" if they're both specified.
-            final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
-                public char[] getPassword() {
-                    char[] userPassword;
-                    if (prot instanceof KeyStore.PasswordProtection) {
-                        userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
-                    } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
-                        PasswordCallback cb = new PasswordCallback("Password: ", true);
-                        try {
-                            ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
-                        } catch (IOException e) {
-                        } catch (UnsupportedCallbackException e) {
-                        }
-                        userPassword = cb.getPassword();
-                    } else {
-                        userPassword = null;
-                    }
-                    char[] ret;
-                    if (configLocalPassword == null || configRemotePassword == null) {
-                        ret = userPassword; // The simple case: no password in config file. Use what remote gave us
-                    } else if (Arrays.equals(configRemotePassword, userPassword)) {
-                        ret = configLocalPassword;      // Remote password correct, convert to local password
-                    } else {
-                        ret = new char[0];      // invalid password
-                    }
-                    return ret;
-                }
-            };
-
+            final KeyStore.PasswordProtection passwordProtection = getPasswordProtection(config, prot);
             final Provider fprovider = provider;
             if (provider instanceof AuthProvider) {
                 ((AuthProvider)provider).setCallbackHandler(new CallbackHandler() {
@@ -447,6 +416,42 @@ class Server {
             throw e;
         }
     }
+
+    private static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
+        // This passwordProtection converts any callback supplied to this method to a password protection,
+        // and converts from the "net_password" to the "local_password" if they're both specified.
+        final char[] localPassword = config.has("local_password") ? config.stringValue("local_password").toCharArray() : null;     // Password to access KeyStore
+        final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
+        final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
+            public char[] getPassword() {
+                char[] userPassword;
+                if (prot instanceof KeyStore.PasswordProtection) {
+                    userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
+                } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
+                    PasswordCallback cb = new PasswordCallback("Password: ", true);
+                    try {
+                        ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
+                    } catch (IOException e) {
+                    } catch (UnsupportedCallbackException e) {
+                    }
+                    userPassword = cb.getPassword();
+                } else {
+                    userPassword = null;
+                }
+                char[] ret;
+                if (localPassword == null || networkPassword == null) {
+                    ret = userPassword; // The simple case: no password in config file. Use what remote gave us
+                } else if (Arrays.equals(networkPassword, userPassword)) {
+                    ret = localPassword;      // Remote password correct, convert to local password
+                } else {
+                    ret = new char[0];      // invalid password
+                }
+                return ret;
+            }
+        };
+        return passwordProtection;
+    }
+
 
     //----------------------------------------------------------------------------
 

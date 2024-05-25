@@ -11,10 +11,10 @@ server:
       type: pkcs12
       path: "ectest.pkcs12"       # ... which contains a key called "eckey"
       local_password: "password"  # The actual password for the keystore
-      remote_password: "secret"   # The password the remote user must enter
+      net_password: "secret"   # The password the remote user must enter
     ks2:
       type: pkcs12
       path: "rsatest.pkcs12"      # .. which contains a key called "rsakey"
       local_password: "password"
-      remote_password: "secret"
+      net_password: "secret"
 
