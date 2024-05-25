@@ -53,7 +53,9 @@ public class NetProvider extends Provider {
         Engine engine = new Engine();
         try {
             engine.load(new ByteArrayInputStream(conf.getBytes("UTF-8")));
-        } catch (IOException e) {}
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         return new NetProvider(engine);
     }
 

@@ -5,6 +5,7 @@ import java.util.function.*;
 import java.security.*;
 import java.nio.*;
 import java.net.*;
+import javax.net.ssl.*;
 import java.io.*;
 import java.util.concurrent.*;
 import com.bfo.json.*;
@@ -14,6 +15,7 @@ class RemoteSupplier {
     private final Engine engine;
     private final String name, host, uri;
     private final Map<String,String> properties;
+    private final boolean selfSigned;
     private Map<String,KeyStore.Entry> keystore;
 
     RemoteSupplier(Engine engine, String name, String host, InetSocketAddress address, Map<String,String> properties) {
@@ -21,6 +23,7 @@ class RemoteSupplier {
         this.name = name;
         this.host = host;
         this.properties = properties;
+        selfSigned = "true".equalsIgnoreCase(properties.get("self_signed"));
         boolean secure = "true".equalsIgnoreCase(properties.get("secure"));
         String path = properties.get("path");
         if (path == null) {
@@ -61,9 +64,18 @@ class RemoteSupplier {
             con.setConnectTimeout(2000);
             con.setReadTimeout(5000);
             con.setRequestProperty("Content-Type", "application/cbor");
+            if (selfSigned && con instanceof HttpsURLConnection) {
+                HttpsURLConnection scon = (HttpsURLConnection)con;
+                scon.setSSLSocketFactory(engine.getSSLContext(selfSigned).getSocketFactory());
+                scon.setHostnameVerifier(new HostnameVerifier() {
+                    public boolean verify(String hostname, SSLSession session) {
+                        return true;
+                    }
+                });
+            }
             return con;
         } catch (URISyntaxException e) {
-            throw new RuntimeException(e);
+            throw new IOException(e);
         }
     }
 

@@ -151,6 +151,6 @@ where "HASH" is one of SHA224, SHA256, SHA384, SHA512, SHA3-224, SHA3-256, SHA3-
 
 Todo are:
 
-* Add HTTPS to the HTTP server (quite important!)
 * Add RSAPSS, Ed25519 and Ed448
+* Config file format is a bit ad-hoc
 * Proof of concept in another language would be nice

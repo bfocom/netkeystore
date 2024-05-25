@@ -6,6 +6,15 @@ server:
   name: "Example server"          # The service name (default: derived from hostname)
   port: 0                         # The port, or 0 for auto (default: 0)
   zeroconf: true                  # Announce the service using zeroconf (default: true)
+
+  https:
+    # If an "https" section is specified, the server will use HTTPS.
+    # Self-signed certificates are accepted by default in the client - this system is
+    # only run within a LAN, and a dynamic webserver address makes a full chain impractical
+    type: pkcs12
+    path: "ectest.pkcs12"       # ... which contains a key called "eckey"
+    password: "password"      # The actual password for the keystore
+
   shares:
     ks1:
       type: pkcs12

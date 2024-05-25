@@ -33,8 +33,20 @@ class Server {
         debug = config.booleanValue("debug");
     }
 
-    int start(int port, boolean secure, String path) throws IOException {
-        htserver = HttpServer.create(new InetSocketAddress(port), 0);
+    int start(int port, String path, final SSLContext ssl) throws IOException {
+        if (ssl == null) {
+            htserver = HttpServer.create();
+        } else {
+            htserver = HttpsServer.create();
+            ((HttpsServer)htserver).setHttpsConfigurator(new HttpsConfigurator(ssl) {
+                public void configure (HttpsParameters params) {
+                    SSLParameters sslp = new SSLParameters();
+                    sslp.setNeedClientAuth(config.booleanValue("client_auth"));
+                    params.setSSLParameters(sslp);
+                }
+            });
+        }
+        htserver.bind(new InetSocketAddress(port), 0);
         if (path == null || path.equals("") || path.equals("/")) {
             path = "/";
         } else {
@@ -86,7 +98,7 @@ class Server {
                     final String storeName = e.getKey().toString();
                     final Json ksconfig = e.getValue();
                     try {
-                        KeyStore keystore = loadLocalKeyStore(ksconfig, prot);            // This can't be cached!
+                        KeyStore keystore = Engine.loadLocalKeyStore(engine.getName(), ksconfig, prot);            // This can't be cached!
                         for (Enumeration<String> e2 = keystore.aliases();e2.hasMoreElements();) {
                             String name = e2.nextElement();
                             if (keystore.entryInstanceOf(name, KeyStore.PrivateKeyEntry.class)) {
@@ -217,7 +229,7 @@ class Server {
                             }
                             KeyStore keystore = null;
                             try {
-                                keystore = loadLocalKeyStore(ksconfig, storeProt);            // This can't be cached!
+                                keystore = Engine.loadLocalKeyStore(engine.getName(), ksconfig, storeProt);            // This can't be cached!
                             } catch (UnrecoverableKeyException ex) {
                                 auth = Json.read("[]");
                                 Json j = Json.read("{}");
@@ -230,7 +242,7 @@ class Server {
                             if (keystore != null) {
                                 KeyStore.Entry entry = null;
                                 try {
-                                    entry = keystore.getEntry(keyname, getPasswordProtection(ksconfig, keyProt != null ? keyProt : storeProt));
+                                    entry = keystore.getEntry(keyname, Engine.getPasswordProtection(ksconfig, keyProt != null ? keyProt : storeProt));
                                 } catch (UnrecoverableKeyException ex) {
                                     err = "auth";
                                     auth = Json.read("[]");
@@ -332,126 +344,6 @@ class Server {
             }
         }
     }
-
-    private KeyStore loadLocalKeyStore(Json config, KeyStore.ProtectionParameter prot) throws IOException, GeneralSecurityException {
-        try {
-            String type = config.stringValue("type");
-            String path = config.stringValue("path");
-            String providerName = config.stringValue("provider");
-            Provider provider = null;
-            if ("pkcs11".equals(type)) {
-                provider = Security.getProvider("SunPKCS11");
-                StringBuilder sb = new StringBuilder();
-                sb.append("--");
-                if (!config.isString("name")) {
-                    sb.append("name = " + engine.getName() + "\n");
-                }
-                for (Map.Entry<Object,Json> e : config.mapValue().entrySet()) {
-                    String key = e.getKey().toString();
-                    switch (key.toLowerCase()) {
-                        case "name":
-                        case "library":
-                        case "slotlistindex":
-                        case "slot":
-                        case "description":
-                        case "enabledmechanisms":
-                        case "disabedmechanisms":
-                            sb.append(key + " = " + e.getValue().stringValue()+ "\n");
-                            break;
-                    }
-                    // TODO attributes
-                }
-                provider = provider.configure(sb.toString());
-                path = null;
-            } else {
-                if (providerName != null) {
-                    for (Provider p : Security.getProviders()) {
-                        if (p.getClass().getName().equals(providerName) || p.getName().equals(providerName)) {
-                            provider = p;
-                            break;
-                        }
-                    }
-                    if (provider == null) {
-                        throw new IllegalArgumentException("Provider \"" + providerName+ "\" not found");
-                    }
-                }
-            }
-
-            final KeyStore.PasswordProtection passwordProtection = getPasswordProtection(config, prot);
-            final Provider fprovider = provider;
-            if (provider instanceof AuthProvider) {
-                ((AuthProvider)provider).setCallbackHandler(new CallbackHandler() {
-                    public void handle(Callback[] callbacks) {
-                        for (Callback cb : callbacks) {
-                            if (cb instanceof PasswordCallback) {
-                                ((PasswordCallback)cb).setPassword(passwordProtection.getPassword());
-                            }
-                        }
-                    }
-                });
-            }
-            final KeyStore.LoadStoreParameter loadParam = new KeyStore.LoadStoreParameter() {
-                public KeyStore.ProtectionParameter getProtectionParameter() {
-                    return passwordProtection;
-                }
-            };
-            KeyStore keystore = null;
-            if (provider == null && path != null) {
-                keystore = KeyStore.getInstance(new File(path), loadParam);
-            } else {
-                if (provider == null) {
-                    keystore = KeyStore.getInstance(type);
-                } else {
-                    keystore = KeyStore.getInstance(type, provider);
-                }
-                keystore.load(loadParam);
-            }
-            return keystore;
-        } catch (IOException e) {
-            if (e.getCause() instanceof UnrecoverableKeyException) {
-                throw (UnrecoverableKeyException)e.getCause();
-            } else if (e.getCause() instanceof LoginException) {
-                throw (LoginException)e.getCause();
-            }
-            throw e;
-        }
-    }
-
-    private static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
-        // This passwordProtection converts any callback supplied to this method to a password protection,
-        // and converts from the "net_password" to the "local_password" if they're both specified.
-        final char[] localPassword = config.has("local_password") ? config.stringValue("local_password").toCharArray() : null;     // Password to access KeyStore
-        final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
-        final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
-            public char[] getPassword() {
-                char[] userPassword;
-                if (prot instanceof KeyStore.PasswordProtection) {
-                    userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
-                } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
-                    PasswordCallback cb = new PasswordCallback("Password: ", true);
-                    try {
-                        ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
-                    } catch (IOException e) {
-                    } catch (UnsupportedCallbackException e) {
-                    }
-                    userPassword = cb.getPassword();
-                } else {
-                    userPassword = null;
-                }
-                char[] ret;
-                if (localPassword == null || networkPassword == null) {
-                    ret = userPassword; // The simple case: no password in config file. Use what remote gave us
-                } else if (Arrays.equals(networkPassword, userPassword)) {
-                    ret = localPassword;      // Remote password correct, convert to local password
-                } else {
-                    ret = new char[0];      // invalid password
-                }
-                return ret;
-            }
-        };
-        return passwordProtection;
-    }
-
 
     //----------------------------------------------------------------------------
 

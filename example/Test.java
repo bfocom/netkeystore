@@ -1,3 +1,4 @@
+import java.io.*;
 import java.security.*;
 import java.security.cert.X509Certificate;
 
@@ -8,6 +9,7 @@ public class Test {
         String alg = "SHA256withECDSA";
 
         Provider provider = new com.bfo.netkeystore.NetProvider();
+//        provider = provider.configure("client:\n  debug: true");
         KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
         keystore.load(null, password);
 

@@ -28,6 +28,7 @@ class Engine {
     private Server server;
     private NetProvider provider;
     private Json config;
+    private SSLContext selfSignedSSLContext, sslContext;
     private ZeroconfListener clientListener;
     private Map<String,RemoteSupplier> remoteSuppliers = new ConcurrentHashMap<String,RemoteSupplier>();
     private long initializedAfter;
@@ -52,7 +53,7 @@ class Engine {
 
     //---------------------------------------------------------
 
-    private void startClient(boolean search) {
+    private void startClient(boolean search, boolean selfSigned) {
         if (search) {
             zc.query(SERVICE, null);
             zc.addListener(clientListener = new ZeroconfListener() {
@@ -64,7 +65,9 @@ class Engine {
                 @Override public void serviceAnnounced(Service service) {
                     if (SERVICE.equals(service.getType()) && !service.getAddresses().isEmpty()) {
                         InetSocketAddress address = new InetSocketAddress(service.getAddresses().iterator().next(), service.getPort());
-                        addRemoteNode(service.getName(), service.getFQDN(), address, service.getText());
+                        Map<String,String> m = new HashMap<String,String>(service.getText());
+                        m.put("self_signed", selfSigned ? "true" : "false");
+                        addRemoteNode(service.getName(), service.getFQDN(), address, m);
                     }
                 }
                 @Override public void serviceExpired(Service service) {
@@ -101,56 +104,75 @@ class Engine {
     //---------------------------------------------------------
 
     void load(InputStream in) throws IOException {
-        if (in == null) {
-            config = Json.read("{}");
-        } else {
-            config = Json.read(new YamlReader().setInput(in));
-        }
-        Json server = null, client = null;
-        boolean serverAnnounce = false, clientSearch = false;
-        name = config.stringValue("name");
-        if (name == null) {
-            name = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
-        }
-        if (config.isMap("server")) {
-            server = config.get("server");
-            int port = 0;
-            if (server.isNumber("port") && server.numberValue("port") instanceof Integer) {
-                port = server.intValue("port");
-                if (port < 0 || port > 65535) {
-                    throw new IllegalArgumentException("Invalid port " + port);
-                }
+        try {
+            if (in == null) {
+                config = Json.read("{}");
             } else {
-                throw new IllegalArgumentException("Invalid port " + server.get("port"));
+                config = Json.read(new YamlReader().setInput(in));
             }
-            if (!server.isBoolean("zeroconf") || server.booleanValue("zeroconf")) {
-                serverAnnounce = true;
+            Json server = null, client = null;
+            boolean serverAnnounce = false, clientSearch = false;
+            name = config.stringValue("name");
+            if (name == null) {
+                name = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
             }
-            if (serverAnnounce && zc == null) {
-                zc = new Zeroconf();
-            }
-            this.server = new Server(this, server);
-            boolean secure = false;      // TODO
-            String path = null;
-            port = this.server.start(port, secure, path);
-            System.out.println("Listening on port " + port);
-            if (serverAnnounce) {
-                Service.Builder builder = new Service.Builder().setName(name).setType(SERVICE).setPort(port);
-                if (secure) {
-                    builder.put("secure", "true");
+            if (config.isMap("server")) {
+                server = config.get("server");
+                int port = 0;
+                if (server.isNumber("port") && server.numberValue("port") instanceof Integer) {
+                    port = server.intValue("port");
+                    if (port < 0 || port > 65535) {
+                        throw new IllegalArgumentException("Invalid port " + port);
+                    }
+                } else {
+                    throw new IllegalArgumentException("Invalid port " + server.get("port"));
                 }
-                if (path != null && path.length() > 0) {
-                    builder.put("path", path);
+                if (!server.isBoolean("zeroconf") || server.booleanValue("zeroconf")) {
+                    serverAnnounce = true;
                 }
-                service = builder.build(zc);
-                service.announce();
+                if (serverAnnounce && zc == null) {
+                    zc = new Zeroconf();
+                }
+                this.server = new Server(this, server);
+                SSLContext ssl = null;
+                if (server.isMap("https")) {
+                    Json https = server.get("https");
+                    String password = https.stringValue("password");
+                    if (password == null || !https.isString("type")) {
+                        throw new IllegalArgumentException("https requires \"alias\", \"password\" and \"type\" keys");
+                    }
+                    https.put("local_password", password);
+                    https.put("net_password", password);
+                    KeyStore keystore = loadLocalKeyStore(getName(), https, new KeyStore.PasswordProtection(password.toCharArray()));
+                    TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                    tmf.init(keystore);
+                    KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                    kmf.init(keystore, password.toCharArray());
+                    ssl = SSLContext.getInstance("TLS");
+                    ssl.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+                }
+                String path = null;
+                port = this.server.start(port, path, ssl);
+                System.out.println("Listening on port " + port);
+                if (serverAnnounce) {
+                    Service.Builder builder = new Service.Builder().setName(name).setType(SERVICE).setPort(port);
+                    if (ssl != null) {
+                        builder.put("secure", "true");
+                    }
+                    if (path != null && path.length() > 0) {
+                        builder.put("path", path);
+                    }
+                    service = builder.build(zc);
+                    service.announce();
+                }
             }
-        }
 
-        if (config.isMap("client") || server == null) {
-            client = config.get("client");
-            clientSearch = true;
-            if (client != null) {
+            if (config.isMap("client") || server == null) {
+                client = config.get("client");
+                if (client == null) {
+                    client = Json.read("{}");
+                }
+                clientSearch = true;
                 debug = client.booleanValue("debug");
                 if (client.isMap("servers")) {
                     for (Map.Entry<Object,Json> e : client.get("servers").mapValue().entrySet()) {
@@ -168,6 +190,7 @@ class Engine {
                                 }
                                 InetSocketAddress address = new InetSocketAddress(uri.getHost(), uri.getPort());
                                 props.put("path", uri.getPath());
+                                props.put("self_signed", client.booleanValue("self_signed") ? "true": "false"); // Manual servers are NOT self-signed by default
                                 addRemoteNode(name, uri.getHost(), address, props);
                                 clientSearch = false;
                             } catch (URISyntaxException e2) {
@@ -179,18 +202,34 @@ class Engine {
                             throw new IOException("client.servers." + e.getKey() + " is not a map");
                         }
                     }
-                } else if (!client.isNull("client.servers")) {
+                } else if (client.has("servers")) {
                     throw new IOException("client.servers is not a map");
                 }
+                if (clientSearch) {
+                    initializedAfter = System.currentTimeMillis() + 1000;   // Takes a bit for servers to announce
+                    if (zc == null) {
+                        zc = new Zeroconf();
+                    }
+                }
+                sslContext = SSLContext.getInstance("TLS");
+                selfSignedSSLContext = SSLContext.getInstance("TLS");
+                selfSignedSSLContext.init(null, new javax.net.ssl.TrustManager[] { new X509TrustManager() {
+                    public void checkClientTrusted(X509Certificate[] chain, String auth) { }
+                    public void checkServerTrusted(X509Certificate[] chain, String auth) { }
+                    public X509Certificate[] getAcceptedIssuers() { return null; }
+                } }, null);
+                boolean autoSelfSigned = !client.isBoolean("self_signed") || client.booleanValue("self_signed");        // Auto-server are self-signed by default
+                startClient(clientSearch, autoSelfSigned);
+            } else {
+                initializedAfter = System.currentTimeMillis();;
             }
-            if (clientSearch && zc == null) {
-                zc = new Zeroconf();
-                initializedAfter = System.currentTimeMillis() + 1000;   // Takes a bit for servers to announce
-            }
-            startClient(clientSearch);
-        } else {
-            initializedAfter = System.currentTimeMillis();;
+        } catch (GeneralSecurityException e) {
+            throw new IOException(e);
         }
+    }
+
+    synchronized SSLContext getSSLContext(boolean selfSigned) {
+        return selfSigned ? selfSignedSSLContext : sslContext;
     }
 
     //----------------------------------------------------------------------------
@@ -475,6 +514,127 @@ class Engine {
             }
         }
         return signature;
+    }
+
+    //-------------------------------------------------------
+
+    static KeyStore loadLocalKeyStore(String name, Json config, KeyStore.ProtectionParameter prot) throws IOException, GeneralSecurityException {
+        try {
+            String type = config.stringValue("type");
+            String path = config.stringValue("path");
+            String providerName = config.stringValue("provider");
+            Provider provider = null;
+            if ("pkcs11".equals(type)) {
+                provider = Security.getProvider("SunPKCS11");
+                StringBuilder sb = new StringBuilder();
+                sb.append("--");
+                if (!config.isString("name")) {
+                    sb.append("name = " + name + "\n");
+                }
+                for (Map.Entry<Object,Json> e : config.mapValue().entrySet()) {
+                    String key = e.getKey().toString();
+                    switch (key.toLowerCase()) {
+                        case "name":
+                        case "library":
+                        case "slotlistindex":
+                        case "slot":
+                        case "description":
+                        case "enabledmechanisms":
+                        case "disabedmechanisms":
+                            sb.append(key + " = " + e.getValue().stringValue()+ "\n");
+                            break;
+                    }
+                    // TODO attributes
+                }
+                provider = provider.configure(sb.toString());
+                path = null;
+            } else {
+                if (providerName != null) {
+                    for (Provider p : Security.getProviders()) {
+                        if (p.getClass().getName().equals(providerName) || p.getName().equals(providerName)) {
+                            provider = p;
+                            break;
+                        }
+                    }
+                    if (provider == null) {
+                        throw new IllegalArgumentException("Provider \"" + providerName+ "\" not found");
+                    }
+                }
+            }
+
+            final KeyStore.PasswordProtection passwordProtection = getPasswordProtection(config, prot);
+            final Provider fprovider = provider;
+            if (provider instanceof AuthProvider) {
+                ((AuthProvider)provider).setCallbackHandler(new CallbackHandler() {
+                    public void handle(Callback[] callbacks) {
+                        for (Callback cb : callbacks) {
+                            if (cb instanceof PasswordCallback) {
+                                ((PasswordCallback)cb).setPassword(passwordProtection.getPassword());
+                            }
+                        }
+                    }
+                });
+            }
+            final KeyStore.LoadStoreParameter loadParam = new KeyStore.LoadStoreParameter() {
+                public KeyStore.ProtectionParameter getProtectionParameter() {
+                    return passwordProtection;
+                }
+            };
+            KeyStore keystore = null;
+            if (provider == null && path != null) {
+                keystore = KeyStore.getInstance(new File(path), loadParam);
+            } else {
+                if (provider == null) {
+                    keystore = KeyStore.getInstance(type);
+                } else {
+                    keystore = KeyStore.getInstance(type, provider);
+                }
+                keystore.load(loadParam);
+            }
+            return keystore;
+        } catch (IOException e) {
+            if (e.getCause() instanceof UnrecoverableKeyException) {
+                throw (UnrecoverableKeyException)e.getCause();
+            } else if (e.getCause() instanceof LoginException) {
+                throw (LoginException)e.getCause();
+            }
+            throw e;
+        }
+    }
+
+    static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
+        // This passwordProtection converts any callback supplied to this method to a password protection,
+        // and converts from the "net_password" to the "local_password" if they're both specified.
+        final char[] localPassword = config.has("local_password") ? config.stringValue("local_password").toCharArray() : null;     // Password to access KeyStore
+        final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
+        final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
+            public char[] getPassword() {
+                char[] userPassword;
+                if (prot instanceof KeyStore.PasswordProtection) {
+                    userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
+                } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
+                    PasswordCallback cb = new PasswordCallback("Password: ", true);
+                    try {
+                        ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
+                    } catch (IOException e) {
+                    } catch (UnsupportedCallbackException e) {
+                    }
+                    userPassword = cb.getPassword();
+                } else {
+                    userPassword = null;
+                }
+                char[] ret;
+                if (localPassword == null || networkPassword == null) {
+                    ret = userPassword; // The simple case: no password in config file. Use what remote gave us
+                } else if (Arrays.equals(networkPassword, userPassword)) {
+                    ret = localPassword;      // Remote password correct, convert to local password
+                } else {
+                    ret = new char[0];      // invalid password
+                }
+                return ret;
+            }
+        };
+        return passwordProtection;
     }
 
 }

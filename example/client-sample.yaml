@@ -5,7 +5,8 @@
  
 client:
   # debug: true
-  # A list of servers. If none are specified, they will be discovered with zeroconf
+  self_signed: true   # Servers discovered by Zeroconf may use self-signed certs by default
   servers:
+    # A list of servers. If none are specified, they will be discovered with zeroconf
     myserver: "https://localhost:9876/"
 
