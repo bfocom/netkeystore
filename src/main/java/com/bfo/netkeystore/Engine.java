@@ -166,7 +166,11 @@ class Engine {
             boolean clientSearch = false;
             name = config.stringValue("name");
             if (name == null) {
-                name = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
+                try {
+                    name = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
+                } catch (Throwable e) {
+                    name = InetAddress.getLocalHost().getHostName();
+                }
             }
             if (config.isMap("server")) {
                 server = config.get("server");
@@ -194,8 +198,7 @@ class Engine {
                     if (password == null || !https.isString("type")) {
                         throw new IllegalArgumentException("https requires \"alias\", \"password\" and \"type\" keys");
                     }
-                    https.put("net_password", password);
-                    KeyStore keystore = loadLocalKeyStore(getName(), https, new KeyStore.PasswordProtection(password.toCharArray()));
+                    KeyStore keystore = loadLocalKeyStore(https);
                     TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                     tmf.init(keystore);
                     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
@@ -557,8 +560,13 @@ class Engine {
 
     //-------------------------------------------------------
 
-    static KeyStore loadLocalKeyStore(String name, Json config, KeyStore.ProtectionParameter prot) throws IOException, GeneralSecurityException {
+    KeyStore loadLocalKeyStore(Json config) throws IOException, GeneralSecurityException {
         try {
+            KeyStore.ProtectionParameter prot = null;    // localcallback?
+            if (config.isString("password")) {
+                prot = new KeyStore.PasswordProtection(config.stringValue("password").toCharArray());
+            }
+            String engineName = getName();
             String type = config.stringValue("type");
             String path = config.stringValue("path");
             String providerName = config.stringValue("provider");
@@ -601,22 +609,29 @@ class Engine {
                 }
             }
 
-            final KeyStore.PasswordProtection passwordProtection = getPasswordProtection(config, prot);
             final Provider fprovider = provider;
             if (provider instanceof AuthProvider) {
-                ((AuthProvider)provider).setCallbackHandler(new CallbackHandler() {
-                    public void handle(Callback[] callbacks) {
-                        for (Callback cb : callbacks) {
-                            if (cb instanceof PasswordCallback) {
-                                ((PasswordCallback)cb).setPassword(passwordProtection.getPassword());
+                CallbackHandler cbhandler = null;
+                if (prot instanceof KeyStore.CallbackHandlerProtection) {
+                    cbhandler = ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler();
+                } else {
+                    final char[] password = ((KeyStore.PasswordProtection)prot).getPassword();
+                    cbhandler = new CallbackHandler() {
+                        public void handle(Callback[] callbacks) {
+                            for (Callback cb : callbacks) {
+                                if (cb instanceof PasswordCallback) {
+                                    ((PasswordCallback)cb).setPassword(password);
+                                }
                             }
                         }
-                    }
-                });
+                    };
+                }
+                ((AuthProvider)provider).setCallbackHandler(cbhandler);
             }
+            final KeyStore.ProtectionParameter fprot = prot;
             final KeyStore.LoadStoreParameter loadParam = new KeyStore.LoadStoreParameter() {
                 public KeyStore.ProtectionParameter getProtectionParameter() {
-                    return passwordProtection;
+                    return fprot;
                 }
             };
             KeyStore keystore = null;
@@ -639,41 +654,6 @@ class Engine {
             }
             throw e;
         }
-    }
-
-    static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
-        // This passwordProtection converts any callback supplied to this method to a password protection,
-        // and converts from the "net_password" to the "password" if they're both specified.
-        final char[] localPassword = config.has("password") ? config.stringValue("password").toCharArray() : null;     // Password to access KeyStore
-        final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
-        final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
-            public char[] getPassword() {
-                char[] userPassword;
-                if (prot instanceof KeyStore.PasswordProtection) {
-                    userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
-                } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
-                    PasswordCallback cb = new PasswordCallback("Password: ", true);
-                    try {
-                        ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
-                    } catch (IOException e) {
-                    } catch (UnsupportedCallbackException e) {
-                    }
-                    userPassword = cb.getPassword();
-                } else {
-                    userPassword = null;
-                }
-                char[] ret;
-                if (localPassword == null || networkPassword == null) {
-                    ret = userPassword; // The simple case: no password in config file. Use what remote gave us
-                } else if (Arrays.equals(networkPassword, userPassword)) {
-                    ret = localPassword;      // Remote password correct, convert to local password
-                } else {
-                    ret = new char[0];      // invalid password
-                }
-                return ret;
-            }
-        };
-        return passwordProtection;
     }
 
 }

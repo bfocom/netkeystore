@@ -38,12 +38,24 @@ class Server {
     private final Engine engine;
     private final Json config, shares;
     private HttpServer htserver;
+    private Map<String,KeyStoreHolder> keystores;
 
-    Server(Engine engine, Json config) {
+    Server(Engine engine, Json config) throws IOException, GeneralSecurityException {
         this.engine = engine;
         this.config = config;
         this.shares = config.get("shares");
         debug = config.booleanValue("debug");
+        this.keystores = new LinkedHashMap<String,KeyStoreHolder>();
+        // These have to be loaded once because even if we call AuthProvider.logout(), the
+        // PKCS#11 Provider will run out of tokens. So open it once and cache it.
+        for (Map.Entry<Object,Json> e : shares.mapValue().entrySet()) {
+            String name = e.getKey().toString();
+            Json ksconfig = e.getValue();
+            KeyStore keystore = engine.loadLocalKeyStore(ksconfig);
+            String password = ksconfig.stringValue("password");
+            String netpassword = ksconfig.isString("net_password") ? ksconfig.stringValue("net_password") : password;
+            keystores.put(name, new KeyStoreHolder(keystore, password, netpassword));
+        }
     }
 
     boolean isStarted() {
@@ -93,6 +105,41 @@ class Server {
         }
     }
 
+    static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
+        // This passwordProtection converts any callback supplied to this method to a password protection,
+        // and converts from the "net_password" to the "password" if they're both specified.
+        final char[] localPassword = config.has("password") ? config.stringValue("password").toCharArray() : null;     // Password to access KeyStore
+        final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
+        final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
+            public char[] getPassword() {
+                char[] userPassword;
+                if (prot instanceof KeyStore.PasswordProtection) {
+                    userPassword = ((KeyStore.PasswordProtection)prot).getPassword();
+                } else if (prot instanceof KeyStore.CallbackHandlerProtection) {
+                    PasswordCallback cb = new PasswordCallback("Password: ", true);
+                    try {
+                        ((KeyStore.CallbackHandlerProtection)prot).getCallbackHandler().handle(new Callback[] { cb });
+                    } catch (IOException e) {
+                    } catch (UnsupportedCallbackException e) {
+                    }
+                    userPassword = cb.getPassword();
+                } else {
+                    userPassword = null;
+                }
+                char[] ret;
+                if (localPassword == null || networkPassword == null) {
+                    ret = userPassword; // The simple case: no password in config file. Use what remote gave us
+                } else if (Arrays.equals(networkPassword, userPassword)) {
+                    ret = localPassword;      // Remote password correct, convert to local password
+                } else {
+                    ret = new char[0];      // invalid password
+                }
+                return ret;
+            }
+        };
+        return passwordProtection;
+    }
+
     //----------------------------------------------------------------------------
     // Comms
     //----------------------------------------------------------------------------
@@ -105,23 +152,29 @@ class Server {
                 Json req = Json.readCbor(in);
                 in.close();
                 if (debug) System.out.println("# RX /list-v1: " + req);
-                KeyStore.ProtectionParameter prot = null;
+                String storePassword = null;
                 if (req.isList("auth")) {
                     Json auth = req.get("auth");
                     for (int i=0;i<auth.size();i++) {
                         if ("password".equals(auth.get(i).stringValue("type"))) {
-                            prot = new KeyStore.PasswordProtection(auth.get(i).stringValue("password").toCharArray());
+                            storePassword = auth.get(i).stringValue("password");
                             break;
                         }
                     }
                 }
                 final Json keys = Json.read("{}");
                 final Json auth = Json.read("[]");
-                for (Map.Entry<Object,Json> e : shares.mapValue().entrySet()) {
+                for (Map.Entry<String,KeyStoreHolder> e : keystores.entrySet()) {
                     final String storeName = e.getKey().toString();
-                    final Json ksconfig = e.getValue();
-                    try {
-                        KeyStore keystore = Engine.loadLocalKeyStore(engine.getName(), ksconfig, prot);            // This can't be cached!
+                    final KeyStoreHolder holder = e.getValue();
+                    if (storePassword == null || !storePassword.equals(holder.netpassword)) {
+                        Json j = Json.read("{}");
+                        j.put("type", "password");
+                        j.put("prompt", "Password for \"" + storeName + "\"");
+                        j.put("message", storePassword == null ? "Unspecified password" : "Invalid password");
+                        auth.put(auth.size(), j);
+                    } else {
+                        KeyStore keystore = holder.keystore;
                         for (Enumeration<String> e2 = keystore.aliases();e2.hasMoreElements();) {
                             String name = e2.nextElement();
                             if (keystore.entryInstanceOf(name, KeyStore.PrivateKeyEntry.class)) {
@@ -155,16 +208,6 @@ class Server {
                                     keys.put(fullName, j);
                                 }
                             }
-                        }
-                    } catch (Exception ex) {
-                        if (ex instanceof UnrecoverableKeyException || ex instanceof LoginException) {
-                            Json j = Json.read("{}");
-                            j.put("type", "password");
-                            j.put("prompt", "Password for \"" + storeName + "\"");
-                            j.put("message", ex.getMessage());
-                            auth.put(auth.size(), j);
-                        } else {
-                            throw ex;
                         }
                     }
                 }
@@ -218,54 +261,56 @@ class Server {
                     err = "no \"digest\" specified";
                 } else {
                     err = "key \"" + keyname + "\" not found";
-                    for (Map.Entry<Object,Json> e : shares.mapValue().entrySet()) {
+                    for (Map.Entry<String,KeyStoreHolder> e : keystores.entrySet()) {
                         final String storeName = e.getKey().toString();
-                        final Json ksconfig = e.getValue();
+                        final KeyStoreHolder holder = e.getValue();
+                        final KeyStore keystore = holder.keystore;
                         if (keyname.startsWith(storeName + ".")) {
                             err = "Key \"" + keyname + "\" not found in store";
                             keyname = keyname.substring(storeName.length() + 1);
-                            KeyStore.ProtectionParameter storeProt = null, keyProt = null;
+                            String storePassword = null, keyPassword = null;
                             if (req.isList("auth")) {
                                 auth = req.get("auth");
                                 for (int pass=0;pass<2;pass++) {
                                     for (int i=0;i<auth.size();i++) {
                                         Json j = auth.get(i);
                                         if ("password".equals(j.stringValue("type")) && j.isString("password")) {
-                                            KeyStore.PasswordProtection p = new KeyStore.PasswordProtection(j.stringValue("password").toCharArray());
                                             if (pass == 0) {
                                                 if (storeName.equals(j.stringValue("for"))) {
-                                                    storeProt = p;
+                                                    storePassword = j.stringValue("password");
                                                 } else if (keyname.equals(j.stringValue("for"))) {
-                                                    storeProt = p;
+                                                    keyPassword = j.stringValue("password");
                                                 }
                                             } else if (!j.isString("for")) {
-                                                if (storeProt == null) {
-                                                    storeProt = p;
-                                                } else if (keyProt == null) {
-                                                    keyProt = p;
+                                                if (storePassword == null) {
+                                                    storePassword = j.stringValue("password");
+                                                } else if (keyPassword == null) {
+                                                    keyPassword = j.stringValue("password");
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                if (keyPassword == null) {
+                                    keyPassword = storePassword;
+                                }
                                 auth = null;
                             }
-                            KeyStore keystore = null;
-                            try {
-                                keystore = Engine.loadLocalKeyStore(engine.getName(), ksconfig, storeProt);            // This can't be cached!
-                            } catch (UnrecoverableKeyException ex) {
+                            if (storePassword == null || !storePassword.equals(holder.netpassword)) {
                                 auth = Json.read("[]");
                                 Json j = Json.read("{}");
                                 j.put("type", "password");
                                 j.put("prompt", "Password for \"" + storeName + "\"");
-                                j.put("message", ex.getMessage());
+                                j.put("message", storePassword == null ? "Unspecified password" : "Invalid password");
                                 auth.put(0, j);
                                 err = "auth";
-                            }
-                            if (keystore != null) {
+                            } else {
                                 KeyStore.Entry entry = null;
                                 try {
-                                    entry = keystore.getEntry(keyname, Engine.getPasswordProtection(ksconfig, keyProt != null ? keyProt : storeProt));
+                                    if (keyPassword.equals(holder.netpassword)) {
+                                        keyPassword = holder.password;
+                                    }
+                                    entry = keystore.getEntry(keyname, new KeyStore.PasswordProtection(keyPassword.toCharArray()));
                                 } catch (UnrecoverableKeyException ex) {
                                     err = "auth";
                                     auth = Json.read("[]");
@@ -276,7 +321,6 @@ class Server {
                                     auth.put(0, j);
                                 }
                                 if (entry instanceof KeyStore.PrivateKeyEntry) {
-                                    Provider provider = keystore.getProvider();
                                     PrivateKey key = ((KeyStore.PrivateKeyEntry)entry).getPrivateKey();
                                     String keyalg = key.getAlgorithm();
                                     String sigalg;
@@ -292,6 +336,7 @@ class Server {
                                         algorithmParameterSpecClass = null;
                                     }
                                     Signature sig = null;
+                                    Provider provider = keystore.getProvider();
                                     try {
                                         sig = Signature.getInstance(sigalg, provider);
                                     } catch (NoSuchAlgorithmException ex) {
@@ -365,6 +410,16 @@ class Server {
                 exchange.getResponseBody().write(cbor);
                 exchange.getResponseBody().close();
             }
+        }
+    }
+
+    private static class KeyStoreHolder {
+        final KeyStore keystore;
+        final String password, netpassword;
+        KeyStoreHolder(KeyStore keystore, String password, String netpassword) {
+            this.keystore = keystore;
+            this.password = password;
+            this.netpassword = netpassword;
         }
     }
 

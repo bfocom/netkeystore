@@ -31,10 +31,20 @@ public class NetSignatureSpi extends SignatureSpi {
             sigAlgo = algo.substring(ix + 4);
             switch (digestAlgo) {
                 case "NONE":
+                    digestAlgo = "NONE";
+                    break;
                 case "SHA224":
+                    digestAlgo = "SHA-224";
+                    break;
                 case "SHA256":
+                    digestAlgo = "SHA-256";
+                    break;
                 case "SHA384":
+                    digestAlgo = "SHA-384";
+                    break;
                 case "SHA512":
+                    digestAlgo = "SHA-512";
+                    break;
                 case "SHA3-224":
                 case "SHA3-256":
                 case "SHA3-384":
@@ -58,7 +68,14 @@ public class NetSignatureSpi extends SignatureSpi {
         this.digestAlgo = digestAlgo;
         this.digest = "NONE".equals(digestAlgo) ? null : MessageDigest.getInstance(digestAlgo);
         this.noneDigest = "NONE".equals(digestAlgo) ? ByteBuffer.allocate(512) : null;
-        this.verifySignature = Signature.getInstance(algo);
+        for (Provider provider : Security.getProviders()) {
+            if (!(provider instanceof NetProvider)) {
+                try {
+                    this.verifySignature = Signature.getInstance(algo, provider);
+                    break;
+                } catch (Exception e) {}
+            }
+        }
     }
 
     //------------------------------------------------------------------------

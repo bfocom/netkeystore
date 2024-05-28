@@ -15,13 +15,19 @@ public class NetProvider extends Provider {
 
     private Engine engine;
 
+    /**
+     * Use this constructor so it can work with Java 8
+     */
+    @SuppressWarnings("deprecation")
     NetProvider(Engine engine) {
-        super(NAME, "1.0", NAME + " from https://github.com/faceless2/netkeystore");
+        super(NAME, 1.0, NAME + " from https://github.com/faceless2/netkeystore");
         String pack = getClass().getPackage().getName();
         putService(new MyService(this, "KeyStore", KEYSTORE_TYPE, pack + ".NetKeyStoreSpi", null, null));
-        for (String hash : new String[] { "NONE", "SHA224", "SHA256", "SHA384", "SHA512", "SHA3-224", "SHA3-256", "SHA3-384", "SHA3-512" }) {
+        for (String hash : new String[] { "NONE", "SHA224", "SHA256", "SHA384", "SHA512", "SHA3224", "SHA3-256", "SHA3-384", "SHA3-512" }) {
             for (String key : new String[] { "RSA", "ECDSA" }) {
-                putService(new MyService(this, "Signature", hash + "with" + key, pack + ".NetSignatureSpi", null, null));
+                String alg = hash + "with" + key;
+                List<String> aliases = null;
+                putService(new MyService(this, "Signature", alg, pack + ".NetSignatureSpi", aliases, null));
             }
         }
         this.engine = engine;
