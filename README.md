@@ -71,6 +71,16 @@ sig.update(data);
 byte[] sigbytes = sig.sign();
 ```
 
+### Ant "signjar" task
+For the few still using Apache Ant to build, the `<signjar>` task can integrate with this as shown here
+```xml
+<signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password" storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" tsaurl="${tsaurl}">
+  <arg value="-J-cp"/>
+  <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
+</signjar>
+```
+
+
 ## Network protocol
 
 The network protocol is intentionally trivial, with the intent it's easy to build a client in any language.

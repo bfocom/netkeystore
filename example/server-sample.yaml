@@ -12,18 +12,18 @@ server:
     # Self-signed certificates are accepted by default in the client - this system is
     # only run within a LAN, and a dynamic webserver address makes a full chain impractical
     type: pkcs12
-    path: "ectest.pkcs12"       # ... which contains a key called "eckey"
-    password: "password"      # The actual password for the keystore
+    path: "ectest.pkcs12"         # ... which contains a key called "eckey"
+    password: "password"          # The actual password for the keystore
 
   shares:
     ks1:
       type: pkcs12
       path: "ectest.pkcs12"       # ... which contains a key called "eckey"
-      local_password: "password"  # The actual password for the keystore
-      net_password: "secret"   # The password the remote user must enter
+      password: "password"        # The actual password for the keystore
+      net_password: "secret"      # The password the remote user must enter
     ks2:
       type: pkcs12
       path: "rsatest.pkcs12"      # .. which contains a key called "rsakey"
-      local_password: "password"
+      password: "password"
       net_password: "secret"
 
