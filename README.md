@@ -39,7 +39,20 @@ $ java -jar ../dist/netkeystore-1.0.jar --config server-sample.yaml
 Alterantively double-click the `netkeystore` Jar for a simple GUI: the key icon in the system tray will load configurations
 and start/stop the server.
 
-Client use requires no configuration. To list keys with "keystore" and sign a Jar with `jarsigner`
+Client use requires no configuration - to sign programatically:
+
+```java
+Provider provider = new com.bfo.netkeystore.NetProvider();
+KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+keystore.load(null, password);
+PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
+Signature sig = Signature.getInstance(alg, provider);
+sig.initSign(privkey);
+sig.update(data);
+byte[] sigbytes = sig.sign();
+```
+
+Or to list keys with `keytool` and sign a Jar with `jarsigner`
 ```shell
 $ keytool -J-cp -Jnetkeystore-1.0.jar -providerClass com.bfo.netkeystore.NetProvider \
     -keystore NONE -storetype NetKeyStore -list
@@ -61,20 +74,8 @@ $ jarsigner -J-cp -Jnetkeystore-1.0.jar -providerClass com.bfo.netkeystore.NetPr
 Enter Passphrase for keystore: 
 jar signed.
 ```
-Signing programatically is just as simple.
 
-```java
-Provider provider = new com.bfo.netkeystore.NetProvider();
-KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
-keystore.load(null, password);
-PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
-Signature sig = Signature.getInstance(alg, provider);
-sig.initSign(privkey);
-sig.update(data);
-byte[] sigbytes = sig.sign();
-```
-
-For those still using Apache Ant to build, the `<signjar>` task can integrate with this as shown here
+For those still using Apache Ant to build, the `<signjar>` task which calls `jarsigner` cab be used as shown here
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
    storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider">
@@ -82,6 +83,10 @@ For those still using Apache Ant to build, the `<signjar>` task can integrate wi
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
 ```
+
+Note that in Java 11 and earlier, use with `jarsigner` requires adding the provider as a system provider by appending
+a `security.provider._n_=com.bfo.netkeystore.NetProvider` line to `$JAVA_HOME/conf/security/java.security`
+
 
 ## Network protocol
 
