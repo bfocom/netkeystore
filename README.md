@@ -1,4 +1,4 @@
-# hsmshare
+# Net KeyStore
 ![test](https://raw.githubusercontent.com/faceless2/netkeystore/main/aux/arrow.svg)
 
 This project is an attempt to reconcile a problem in software development: development is becoming *more distributed*,
