@@ -77,7 +77,7 @@ byte[] sigbytes = sig.sign();
 For those still using Apache Ant to build, the `<signjar>` task can integrate with this as shown here
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
-     storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider">
+   storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
