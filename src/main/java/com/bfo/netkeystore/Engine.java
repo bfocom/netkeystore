@@ -124,7 +124,7 @@ class Engine {
                     if (port < 0 || port > 65535) {
                         throw new IllegalArgumentException("Invalid port " + port);
                     }
-                } else {
+                } else if (server.has("port")) {
                     throw new IllegalArgumentException("Invalid port " + server.get("port"));
                 }
                 if (!server.isBoolean("zeroconf") || server.booleanValue("zeroconf")) {
@@ -141,7 +141,6 @@ class Engine {
                     if (password == null || !https.isString("type")) {
                         throw new IllegalArgumentException("https requires \"alias\", \"password\" and \"type\" keys");
                     }
-                    https.put("local_password", password);
                     https.put("net_password", password);
                     KeyStore keystore = loadLocalKeyStore(getName(), https, new KeyStore.PasswordProtection(password.toCharArray()));
                     TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -604,8 +603,8 @@ class Engine {
 
     static KeyStore.PasswordProtection getPasswordProtection(final Json config, final KeyStore.ProtectionParameter prot) {
         // This passwordProtection converts any callback supplied to this method to a password protection,
-        // and converts from the "net_password" to the "local_password" if they're both specified.
-        final char[] localPassword = config.has("local_password") ? config.stringValue("local_password").toCharArray() : null;     // Password to access KeyStore
+        // and converts from the "net_password" to the "password" if they're both specified.
+        final char[] localPassword = config.has("password") ? config.stringValue("password").toCharArray() : null;     // Password to access KeyStore
         final char[] networkPassword = config.has("net_password") ? config.stringValue("net_password").toCharArray() : null;  // Password to be entered on network
         final KeyStore.PasswordProtection passwordProtection = new KeyStore.PasswordProtection(null) {
             public char[] getPassword() {
