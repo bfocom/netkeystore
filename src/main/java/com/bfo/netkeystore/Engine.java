@@ -23,15 +23,20 @@ class Engine {
     private static final String SERVICE = "_netkeystore._tcp";
     private Zeroconf zc;
     private boolean debug;
-    private Service service;
     private String name;
     private Server server;
     private NetProvider provider;
     private Json config;
-    private SSLContext selfSignedSSLContext, sslContext;
+    private SSLContext selfSignedSSLContext, sslContext, serverSslContext;
     private ZeroconfListener clientListener;
     private Map<String,RemoteSupplier> remoteSuppliers = new ConcurrentHashMap<String,RemoteSupplier>();
     private long initializedAfter;
+    private int serverPort;
+    private boolean serverPortAuto;
+    private String serverPath;
+    private Service serverService;
+    private boolean serverAnnounce;
+
 
     Engine() {
     }
@@ -83,6 +88,10 @@ class Engine {
         }
     }
 
+    Server getServer() {
+        return server;
+    }
+
     private boolean addRemoteNode(String name, String fqdn, InetSocketAddress address, Map<String,String> properties) {
         if (debug) System.out.println("# Added server name=\"" + name + "\" address=\"" + address + "\"");
         RemoteSupplier supplier = new RemoteSupplier(this, name, fqdn, address, properties);
@@ -103,15 +112,58 @@ class Engine {
 
     //---------------------------------------------------------
 
+    boolean isConfigured() {
+        return config == null;
+    }
+
+    int getServerPort() {
+        return serverPort;
+    }
+    String getServerPath() {
+        return serverPath;
+    }
+    SSLContext getServerSSLContext() {
+        return serverSslContext;
+    }
+
+    void announce(boolean announce, int port) {
+        if (announce) {
+            if (serverService != null) {
+                serverService.cancel();
+                serverService = null;
+            }
+            Service.Builder builder = new Service.Builder().setName(name).setType(SERVICE).setPort(port);
+            if (serverSslContext != null) {
+                builder.put("secure", "true");
+            }
+            if (serverPath != null && serverPath.length() > 0) {
+                builder.put("path", serverPath);
+            }
+            serverService = builder.build(zc);
+            serverService.announce();
+            serverPort = port;
+        } else {
+            if (serverService != null) {
+                serverService.cancel();
+                serverService = null;
+            }
+            if (serverPortAuto) {
+                serverPort = 0;
+            }
+        }
+    }
+
     void load(InputStream in) throws IOException {
         try {
+            config = null;
             if (in == null) {
                 config = Json.read("{}");
             } else {
                 config = Json.read(new YamlReader().setInput(in));
             }
             Json server = null, client = null;
-            boolean serverAnnounce = false, clientSearch = false;
+            serverAnnounce = false;
+            boolean clientSearch = false;
             name = config.stringValue("name");
             if (name == null) {
                 name = InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid();
@@ -127,6 +179,7 @@ class Engine {
                 } else if (server.has("port")) {
                     throw new IllegalArgumentException("Invalid port " + server.get("port"));
                 }
+                serverPort = port;
                 if (!server.isBoolean("zeroconf") || server.booleanValue("zeroconf")) {
                     serverAnnounce = true;
                 }
@@ -134,7 +187,7 @@ class Engine {
                     zc = new Zeroconf();
                 }
                 this.server = new Server(this, server);
-                SSLContext ssl = null;
+                serverSslContext = null;
                 if (server.isMap("https")) {
                     Json https = server.get("https");
                     String password = https.stringValue("password");
@@ -147,23 +200,10 @@ class Engine {
                     tmf.init(keystore);
                     KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                     kmf.init(keystore, password.toCharArray());
-                    ssl = SSLContext.getInstance("TLS");
-                    ssl.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+                    serverSslContext = SSLContext.getInstance("TLS");
+                    serverSslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
                 }
-                String path = null;
-                port = this.server.start(port, path, ssl);
-                System.out.println("Listening on port " + port);
-                if (serverAnnounce) {
-                    Service.Builder builder = new Service.Builder().setName(name).setType(SERVICE).setPort(port);
-                    if (ssl != null) {
-                        builder.put("secure", "true");
-                    }
-                    if (path != null && path.length() > 0) {
-                        builder.put("path", path);
-                    }
-                    service = builder.build(zc);
-                    service.announce();
-                }
+                serverPortAuto = serverPort == 0;
             }
 
             if (config.isMap("client") || server == null) {

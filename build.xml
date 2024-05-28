@@ -46,6 +46,7 @@
         <attribute name="Build-Host" value="${hostname}"/>
         <attribute name="Main-Class" value="com.bfo.netkeystore.Server"/>
         <attribute name="Implementation-Title" value="${ant.project.name}"/>
+        <attribute name="Implementation-Version" value="${version}"/>
         <attribute name="Application-Name" value="NetKeyStore Server"/>
         <attribute name="Sealed" value="true"/>
         <attribute name="Index" value="true"/>

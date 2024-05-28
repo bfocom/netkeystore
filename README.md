@@ -36,7 +36,10 @@ $ cd example
 $ java -jar ../dist/netkeystore-1.0.jar --config server-sample.yaml
 ```
 
-And to list keys with "keystore" and sign a Jar with `jarsigner`
+Alterantively double-click the `netkeystore` Jar for a simple GUI: the key icon in the system tray will load configurations
+and start/stop the server.
+
+Client use requires no configuration. To list keys with "keystore" and sign a Jar with `jarsigner`
 ```shell
 $ keytool -J-cp -Jnetkeystore-1.0.jar -providerClass com.bfo.netkeystore.NetProvider \
     -keystore NONE -storetype NetKeyStore -list
@@ -71,15 +74,14 @@ sig.update(data);
 byte[] sigbytes = sig.sign();
 ```
 
-### Ant "signjar" task
-For the few still using Apache Ant to build, the `<signjar>` task can integrate with this as shown here
+For those still using Apache Ant to build, the `<signjar>` task can integrate with this as shown here
 ```xml
-<signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password" storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" tsaurl="${tsaurl}">
+<signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password" storetype="NetKeyStore"
+     keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" tsaurl="${tsaurl}">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
 ```
-
 
 ## Network protocol
 

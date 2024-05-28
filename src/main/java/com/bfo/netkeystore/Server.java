@@ -19,6 +19,19 @@ import com.bfo.json.*;
 import com.bfo.zeroconf.*;
 import com.sun.net.httpserver.*;
 
+import java.util.prefs.Preferences;
+import java.util.function.Consumer;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+import java.awt.event.*;
+import java.awt.MenuItem;
+import java.awt.PopupMenu;
+import java.awt.Robot;
+import java.awt.SystemTray;
+import java.awt.TrayIcon;
+import javax.imageio.ImageIO;
+
 class Server {
 
     private final boolean debug;
@@ -33,7 +46,14 @@ class Server {
         debug = config.booleanValue("debug");
     }
 
-    int start(int port, String path, final SSLContext ssl) throws IOException {
+    boolean isStarted() {
+        return htserver != null;
+    }
+
+    int start() throws IOException {
+        int port = engine.getServerPort();
+        String path = engine.getServerPath();
+        SSLContext ssl = engine.getServerSSLContext();
         if (ssl == null) {
             htserver = HttpServer.create();
         } else {
@@ -60,12 +80,15 @@ class Server {
         htserver.createContext(path + "list-v1", new ListHandler());
         htserver.createContext(path + "sign-v1", new SignHandler());
         htserver.start();
-        return htserver.getAddress().getPort();
+        port = htserver.getAddress().getPort();
+        engine.announce(true, port);
+        return port;
     }
 
-    void stopServer() throws InterruptedException {
+    void stop() throws InterruptedException {
         if (htserver != null) {
             htserver.stop(0);
+            engine.announce(false, 0);
             htserver = null;
         }
     }
@@ -353,24 +376,174 @@ class Server {
         System.exit(0);
     }
 
+    private static void guilog(Throwable e) {
+        e.printStackTrace();
+        StringWriter w = new StringWriter();
+        e.printStackTrace(new PrintWriter(w));
+        JOptionPane.showMessageDialog(null, w.toString(), "Error", JOptionPane.ERROR_MESSAGE);
+    }
+
+    private static void gui(final Engine engine, String userConfigFile) throws Exception {
+        final Preferences prefs = Preferences.userNodeForPackage(Engine.class);
+        final String configFile = userConfigFile != null ? userConfigFile : prefs.get("config", null);
+
+        if (SystemTray.isSupported()) {
+            final PopupMenu popup = new PopupMenu();
+            final MenuItem about = new MenuItem("NetKeyStore " +  Server.class.getPackage().getImplementationVersion());
+            final MenuItem confdetail = new MenuItem("Configuration: none");
+            final MenuItem listening = new MenuItem("Not listening");
+            final MenuItem conf = new MenuItem("Configure...");
+            final MenuItem stop = new MenuItem("Start server");
+            final MenuItem quit = new MenuItem("Quit");
+            about.setEnabled(false);
+            confdetail.setEnabled(false);
+            listening.setEnabled(false);
+            stop.setEnabled(false);
+
+            popup.add(about);
+            popup.add(confdetail);
+            popup.add(listening);
+            popup.addSeparator();
+            popup.add(conf);
+            popup.add(stop);
+            popup.add(quit);
+
+            final Consumer<File> loader = new Consumer<File>() {
+                public void accept(File file) {
+                    if (file != null && file.canRead()) {
+                        try {
+                            if (engine.getServer() != null && engine.getServer().isStarted()) {
+                                engine.getServer().stop();
+                                stop.setLabel("Start server");
+                                stop.setEnabled(false);
+                                Thread.sleep(100);
+                            }
+                            FileInputStream in = new FileInputStream(file);
+                            confdetail.setLabel("Configuration: none");
+                            listening.setLabel("Not listening");
+                            engine.load(in);
+                            in.close();
+                            engine.getServer().start();
+                            stop.setEnabled(true);
+                            stop.setLabel("Stop server");
+                            confdetail.setLabel("Configuration: " + file);
+                            listening.setLabel("Listening on " + engine.getServerPort());
+                            prefs.put("config", file.getPath());
+                        } catch (Exception ex) {
+                            guilog(ex);
+                            prefs.remove("config");
+                        }
+                    }
+                }
+            };
+
+            stop.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    try {
+                        if (engine.getServer() != null && engine.getServer().isStarted()) {
+                            engine.getServer().stop();
+                            listening.setLabel("Not listening");
+                            stop.setLabel("Start server");
+                        } else {
+                            engine.getServer().start();
+                            stop.setLabel("Stop server");
+                            listening.setLabel("Listening on " + engine.getServerPort());
+                        }
+                    } catch (Exception ex) {
+                        guilog(ex);
+                    }
+                }
+            });
+
+            conf.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    try {
+                        JFileChooser chooser = new JFileChooser(new File(System.getProperty("user.home")));
+                        if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                            loader.accept(chooser.getSelectedFile());
+                        }
+                    } catch (Exception ex) {
+                        guilog(ex);
+                    }
+                }
+            });
+
+            quit.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    try {
+                        if (engine.getServer() != null && engine.getServer().isStarted()) {
+                            engine.getServer().stop();
+                            Thread.sleep(100);
+                        }
+                    } catch (Exception ex) {}
+                    System.exit(0);
+                }
+            });
+
+            final TrayIcon trayIcon = new TrayIcon(ImageIO.read(Server.class.getResource("data/trayicon.png")), "BFO Publisher");
+            final Robot robot = new Robot();
+            trayIcon.setImageAutoSize(true);
+            trayIcon.setPopupMenu(popup);
+            trayIcon.setToolTip("NetKeyStore");
+            SystemTray.getSystemTray().add(trayIcon);
+            // Next bit makes things better on Windows
+            trayIcon.addMouseListener(new MouseAdapter() {
+                public void mouseClicked(MouseEvent e) {
+                    // Turn left-click into right-click
+                    if (e.getButton() == MouseEvent.BUTTON1) {
+                        robot.mousePress(MouseEvent.BUTTON3_DOWN_MASK);
+                        robot.mouseRelease(MouseEvent.BUTTON3_DOWN_MASK);
+                    }
+                }
+            });
+
+            if (configFile != null) {
+                System.out.println("Loading \"" + configFile + "\"");
+                SwingUtilities.invokeLater(new Runnable() {
+                    public void run() {
+                        loader.accept(new File(configFile));
+                    }
+                });
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         String config = null;
+        Boolean gui = null;
+        if (args.length == 0) {
+            System.out.println("Starting with default arguments \"--gui\"");
+            args = new String[] { "--gui" };
+        }
         for (int i=0;i<args.length;i++) {
             String s = args[i];
             if (s.equals("--config") && i+1 < args.length && config == null) {
                 config = args[++i];
+            } else if (s.equals("--gui") && gui == null) {
+                gui = true;
+            } else if (s.equals("--nogui") && gui == null) {
+                gui = false;
             } else {
                 System.err.println("Invalid argument \"" + args[i] + "\"");
                 help();
             }
         }
-        if (config == null) {
-            help();
+        if (gui == null) {
+            gui = false;
         }
         Engine engine = new Engine();
-        InputStream in = new FileInputStream(config);
-        engine.load(in);
-        in.close();
+        if (gui) {
+            gui(engine, config);
+        } else {
+            if (config == null) {
+                help();
+            }
+            InputStream in = new FileInputStream(config);
+            engine.load(in);
+            in.close();
+            engine.getServer().start();
+            System.out.println("Listening on " + engine.getServerPort());
+        }
     }
 
 }
