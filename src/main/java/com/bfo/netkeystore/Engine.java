@@ -22,7 +22,7 @@ class Engine {
 
     private static final String SERVICE = "_netkeystore._tcp";
     private Zeroconf zc;
-    private boolean debug;
+    boolean debug;
     private String name;
     private Server server;
     private NetProvider provider;
@@ -58,8 +58,11 @@ class Engine {
 
     //---------------------------------------------------------
 
-    private void startClient(boolean search, boolean selfSigned) {
+    void startClient(boolean search, boolean selfSigned) {
         if (search) {
+            if (zc == null) {
+                zc = new Zeroconf();
+            }
             zc.query(SERVICE, null);
             zc.addListener(clientListener = new ZeroconfListener() {
                 @Override public void serviceNamed(String type, String name) {
@@ -72,6 +75,7 @@ class Engine {
                         InetSocketAddress address = new InetSocketAddress(service.getAddresses().iterator().next(), service.getPort());
                         Map<String,String> m = new HashMap<String,String>(service.getText());
                         m.put("self_signed", selfSigned ? "true" : "false");
+                        if (debug) System.out.println("# Found server name=\"" + service.getName() + "\" host="+service.getFQDN()+" port="+service.getPort()+" text="+service.getText()+" addresses=\"" + service.getAddresses() + "\"");
                         addRemoteNode(service.getName(), service.getFQDN(), address, m);
                     }
                 }
@@ -93,7 +97,6 @@ class Engine {
     }
 
     private boolean addRemoteNode(String name, String fqdn, InetSocketAddress address, Map<String,String> properties) {
-        if (debug) System.out.println("# Added server name=\"" + name + "\" address=\"" + address + "\"");
         RemoteSupplier supplier = new RemoteSupplier(this, name, fqdn, address, properties);
         if (remoteSuppliers.putIfAbsent(name, supplier) == null) {
             return true;
@@ -324,7 +327,8 @@ class Engine {
         if (remoteSuppliers.size() == 1) {
             return remoteSuppliers.values().iterator().next().getKeyStore(prot);
         }
-        final Map<String,KeyStore.Entry> entries = new LinkedHashMap<String,KeyStore.Entry>();
+        // Store names in temp map. If the key name is unique, use that, otherwise prefix with supplier name
+        final Map<String,List<Map.Entry<String,KeyStore.Entry>>> temp = new LinkedHashMap<>();
         final Throwable[] exception = new Throwable[1];
         final CountDownLatch latch = new CountDownLatch(remoteSuppliers.size());
         for (RemoteSupplier s : remoteSuppliers.values()) {
@@ -333,9 +337,13 @@ class Engine {
                 public void run() {
                     try {
                         Map<String,KeyStore.Entry> map = supplier.getKeyStore(prot);
-                        synchronized(entries) {
+                        synchronized(temp) {
                             for (Map.Entry<String,KeyStore.Entry> e : map.entrySet()) {
-                                entries.put(supplier.getName() + "." + e.getKey(), e.getValue());
+                                List<Map.Entry<String,KeyStore.Entry>> l = temp.get(e.getKey());
+                                if (l == null) {
+                                    temp.put(e.getKey(), l = new ArrayList<Map.Entry<String,KeyStore.Entry>>());
+                                }
+                                l.add(new AbstractMap.SimpleImmutableEntry<String,KeyStore.Entry>(supplier.getName(), e.getValue()));
                             }
                         }
                     } catch (Exception e) {
@@ -355,13 +363,27 @@ class Engine {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        if (entries.isEmpty() && exception[0] != null) {
+        if (temp.isEmpty() && exception[0] != null) {
             if (exception[0] instanceof IOException) {
                 throw (IOException)exception[0];
             } else if (exception[0] instanceof UnrecoverableKeyException) {
                 throw (UnrecoverableKeyException)exception[0];
             } else {
                 throw (RuntimeException)exception[0];
+            }
+        }
+        final Map<String,KeyStore.Entry> entries = new LinkedHashMap<String,KeyStore.Entry>();
+        for (Map.Entry<String,List<Map.Entry<String,KeyStore.Entry>>> e : temp.entrySet()) {
+            String keyName = e.getKey();
+            List<Map.Entry<String,KeyStore.Entry>> l = e.getValue();
+            if (l.size() == 1) {
+                entries.put(keyName, l.get(0).getValue());
+            } else {
+                for (Map.Entry<String,KeyStore.Entry> e2 : l) {
+                    String supplierName = e2.getKey();
+                    KeyStore.Entry entry = e2.getValue();
+                    entries.put(supplierName + "." + keyName, entry);
+                }
             }
         }
         return entries;

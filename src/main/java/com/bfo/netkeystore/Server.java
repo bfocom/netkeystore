@@ -426,7 +426,10 @@ class Server {
     //----------------------------------------------------------------------------
 
     private static void help() {
-        System.out.println("Usage: java -jar netkeystore-1.0.jar --config <conf.yaml>");
+        final String jar = "java -jar netkeystore-" + Server.class.getPackage().getImplementationVersion();
+        System.out.println("Usage: " + jar + " --config <conf.yaml>  (for CLI use)");
+        System.out.println("Usage: " + jar + "                       (for GUI use)");
+        System.out.println("       " + jar + " --scan                (to scan for servers)");
         System.out.println("For details see https://github.com/faceless2/netkeystore");
         System.exit(0);
     }
@@ -569,6 +572,18 @@ class Server {
         if (args.length == 0) {
             System.out.println("Starting with default arguments \"--gui\"");
             args = new String[] { "--gui" };
+        }
+        if (args.length == 1 && args[0].equals("--scan")) {
+            Engine engine = new Engine();
+            engine.debug = true;
+            engine.startClient(true, true);
+            while (true) {
+                try {
+                    synchronized(Server.class) {
+                        Server.class.wait();
+                    }
+                } catch (InterruptedException e) { }
+            }
         }
         for (int i=0;i<args.length;i++) {
             String s = args[i];
