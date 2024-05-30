@@ -24,7 +24,7 @@ into one KeyStore.
 
 ### Building and testing
 
-There are two dependencies: JSON and Zeroconf libraries, both written by BFO and included in the "lib" folder,
+There are two dependencies: [JSON](https://faceless2.github.io/json) and [Zeroconf](https://faceless2.github.io/zeroconf) libraries, both written by BFO and included in the "lib" folder,
 so building is as simple as running `ant`. A single `netkeystore-1.0.jar` file is generated in `dist`
 
 Several example configurations are shown in the `example` folder. To start a server
