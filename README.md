@@ -171,3 +171,6 @@ Todo are:
 * Add RSAPSS, Ed25519 and Ed448
 * Config file format is a bit ad-hoc
 * Proof of concept in another language would be nice
+* Provider should probably implement AuthProvider
+* There's some nice looking hardware at https://nitrokey.com with an [API](https://nethsmdemo.nitrokey.com/api_docs/index.html) we could consider emulating?
+

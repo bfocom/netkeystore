@@ -7,12 +7,13 @@ server:
       type: pkcs11
       # The "library", "slot", "slotListIndex" etc properties are what
       # you'd normally put in the PKCS#11 configuration file used by Java.
-      library: "/usr/local/lib/libykcs11.dylib"
+      #library: "/usr/local/lib/libykcs11.dylib"   # macOS
+      library: "/usr/local/lib/libykcs11.so"      # Linux
 
-      # Yubikeys will lock after too many failed attempts, so we definitely
-      # recommend specifing a local_password and remote_password so that
-      # failed attempts are never passed to the device. "123456" is the
-      # default for Yubikeys.
+
+      # "password" is the password for the PKCS#11 key, and is required.
+      # "net_password" is the password we expect on the network, which
+      # defaults to the same as password if not specified.
       password: "123456"
       net_password: "password"
 

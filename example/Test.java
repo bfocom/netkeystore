@@ -1,3 +1,4 @@
+import java.util.*;
 import java.io.*;
 import java.security.*;
 import java.security.cert.X509Certificate;
@@ -14,6 +15,9 @@ public class Test {
         keystore.load(null, password);
 
         PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
+        if (privkey == null) {
+            throw new IllegalStateException("Alias \"" + alias + "\" not found in " + Collections.list(keystore.aliases()));
+        }
         PublicKey pubkey = ((X509Certificate)keystore.getCertificate(alias)).getPublicKey();
 
         byte[] data = new byte[100];
