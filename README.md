@@ -19,7 +19,7 @@ The server is written in Java and is tested with Yubikey FIPS 5 tokens, but shou
 that can be used with Java (and also with software keystores like PKCS#12 files).
 
 The client is also Java, and consists of a `java.security.Provider` providing a `java.security.KeyStore`.
-Zero configuration really applies here; any servers on the network are foundautomatically and combined
+Zero configuration really applies here; any servers on the network are found automatically and combined
 into one KeyStore.
 
 ### Building and testing
