@@ -83,7 +83,10 @@ and start/stop the server.
 To sign a byte array programatically, using an client auto-configured with Zeroconf:
 
 ```java
-Provider provider = new com.bfo.netkeystore.NetProvider();
+import new com.bfo.netkeystore.client.NetProvider;
+import java.security.*;
+
+Provider provider = new NetProvider();
 KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
 PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
@@ -95,11 +98,16 @@ byte[] sigbytes = sig.sign();
 
 To sign a PDF with the [BFO PDF Library](https://bfo.com/products/pdf) using a configuration from a file
 ```java
-Provider provider = new com.bfo.netkeystore.NetProvider();
+import com.bfo.netkeystore.client.NetProvider;
+import java.security.*;
+import java.io.*;
+import org.faceless.pdf2.*;
+
+Provider provider = new NetProvider();
 provider.load(new FileInputStream("config.yaml"));
 KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
-PDF pdf = new PDF(new PDFReader(new File("input.pdf")));
+PDF pdf = new PDF(new PDFReader(new FileInputStream("input.pdf")));
 FormSignature sig = new FormSignature();
 SignatureHandlerFactory sigfactory = new AcrobatSignatureHandlerFactory();
 sig.sign(keystore, alias, password, sigfactory);
@@ -134,7 +142,7 @@ For those still using Apache Ant to build, the `<signjar>` task which calls `jar
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
      storetype="NetKeyStore" keystore="NONE"
-     providerclass="com.bfo.netkeystore.NetProvider" providerarg="path/to/config.yaml">
+     providerclass="com.bfo.netkeystore.client.NetProvider" providerarg="path/to/config.yaml">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
