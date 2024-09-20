@@ -16,7 +16,7 @@ import javax.security.auth.callback.*;
 /**
  * <p>
  * A standalone OAuth2 authorization class with no external dependencies that supports
- * "authorization", "refresh", "device", "client credentials" and "revoke" flows.
+ * "authorization", "refresh", "device", "client credentials" flows.
  * </p><p>
  * To use this class with "authorization" flow (the normal one) you'll need to create
  * a {@link RedirectURLHandler} to handle the initial OAuth2 authorization, which makes a callback
