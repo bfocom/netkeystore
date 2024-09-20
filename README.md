@@ -116,7 +116,7 @@ $ keytool -J-cp -Jnetkeystore-client-2.0.jar \
      -keystore NONE -storetype NetKeyStore -list -v
 
 # Java 9+
-$ keytool -providerPath netkeystore-client-2.0.jar
+$ keytool -providerPath netkeystore-client-2.0.jar \
      -providerClass com.bfo.netkeystore.client.NetProvider \
      -providerarg path/to/config.yaml \
      -keystore NONE -storetype NetKeyStore -list -v
