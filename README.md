@@ -111,8 +111,9 @@ pdf.render(new FileOutputStream("signed.pdf"));
 
 A more complete example is in the "example" folder, but the main advantage it has over these
 code snippets is it uses a `Keystore.CallbackHandlerProtection` for authorization rather than
-a `char[] password`. This is recommended in general, and is necessary for OAuth2 authorization as
-a Callback is used to notify the client of the URL to be opened for authorization.
+a `char[] password`. This necessary for OAuth2 authorization (as a Callback is used to notify
+the client of the URL to be opened for authorization) and recommended if there is more than
+one server in the configuration.
 
 To list keys with `keytool`
 ```shell
