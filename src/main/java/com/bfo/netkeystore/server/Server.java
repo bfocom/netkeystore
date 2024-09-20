@@ -370,7 +370,11 @@ public class Server {
         htserver.start();
         port = htserver.getAddress().getPort();
         if (this.url == null) {
-            this.url = (sslcontext == null ? "http://" : "https://") +  InetAddress.getLocalHost().getHostName() + ":" + port + prefix;
+            String hostname = config.isString("hostname") ? config.stringValue("hostname") : null;
+            if (hostname == null) {
+                hostname = InetAddress.getLocalHost().getHostName() + ".local";    // If we're using it anywhere it's zeroconf
+            }
+            this.url = (sslcontext == null ? "http://" : "https://") +  hostname + ":" + port + prefix;
         }
         if (auth.type().startsWith("oauth2") && !info.isString("oauth") && !info.isString("oauth2Issuer")) {
             info.put("oauth2", getURL());
