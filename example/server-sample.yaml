@@ -1,29 +1,122 @@
-# A YAML Configuration file demonstrating how to share two PKCS#12 based
-# keystores over the network. More than one "share" can be specified.
- 
-server:
-  #debug: true
-  name: "Example server"          # The service name (default: derived from hostname)
-  port: 0                         # The port, or 0 for auto (default: 0)
-  zeroconf: true                  # Announce the service using zeroconf (default: true)
+# A sample configuration file for the NetKeyStore server.
 
-  https:
-    # If an "https" section is specified, the server will use HTTPS.
-    # Self-signed certificates are accepted by default in the client - this system is
-    # only run within a LAN, and a dynamic webserver address makes a full chain impractical
-    type: pkcs12
-    path: "ectest.pkcs12"         # ... which contains a key called "eckey"
-    password: "password"          # The actual password for the keystore
+name: "MyKeyServer"         # The name of the server (required)
+zeroconf: true              # Announce server over zeroconf? (default: true)
+#debug: true                # Log network traffic to System.out? (default: false)
+#base: "path/to/this/file"  # The optional base against which to resolve any relative paths in this file
+port: 18001                 # The port to run the webserver on (default: 0, to auto-select)
+#version: "1.0.3"           # The version number to claim to support (default: "1.0.3")
+#max_input_buf: 8192        # The maximum number of bytes in a client request (default: 8192)
+#prefix: "/prefix/"         # The prefix for the URLs served by this server (default: none)
+#url: "http://blah.com"     # The URL to use when announcing this server on zeroconf (default: derived automatically)
+#static: "path/to/static"   # The path from which to serve static files if the URL doesn't match anything else (default: none)
 
-  shares:
-    ks1:
-      type: pkcs12
-      path: "ectest.pkcs12"       # ... which contains a key called "eckey"
-      password: "password"        # The actual password for the keystore
-      net_password: "secret"      # The password the remote user must enter
-    ks2:
-      type: pkcs12
-      path: "rsatest.pkcs12"      # .. which contains a key called "rsakey"
-      password: "password"
-      net_password: "secret"
+# The optional "info" map can specify any other properties that need to be reported on the "info" URL.
+info:
+  description: "An example CSC server"
 
+# The "key_auth" section is optional, and determines how passwords for individual keys are unlocked.
+# If unset the client must supply the password (or share_password, see below), but if not the "type"
+# property must be a classname of an instanceof of KeyAuthorizationHandler, with any other properties
+# passed to that classes "configure" method. Alternatively the value "explicit" can be used to 
+# simply use the local_password (see below) for each key 
+key_auth:
+#  type: implicit                 # use the "local_password" field set on each key
+  type: explicit                 # the default: ask the client for the password
+#  type: com.bfo.netkeystore.server.SampleOnlineOTP   # class name of an implementation
+
+
+# The "https" section is optional. If specified the server will serve over HTTPS not HTTP.
+# It needs a KeyStore containing the HTTPS key and certificates - any keystore will do,
+# it's specified the same way as in the "shares" section.
+#https:
+#  type: "pkcs12"
+#  path: "example-keystore.pkcs12"
+#  password: "password"
+
+
+# The "auth" section determines how a client authenticates with this server.
+# This section is required; the "type" property specifies the method.
+auth:
+  # "open" authentication has no extra properties. No authentication is performed
+  type: open
+
+  # "basic" authentication requires a username/password from the client to login.
+  # The users are listed in the config file - each needs a "name" and password,
+  # currently specifiable as "plaintext" only. They may optionally have a list
+  # of credentials which determine which keys they can use; if unspecified, they
+  # can access all keys.
+#  type: basic
+#  users:
+#    -  { name: "user1", plaintext: "password" }
+#    -  { name: "user2", plaintext: "password" }
+
+   # "oauth2" authentication uses a third-party server to to the authentication.
+   # The access_token is then passed into this server, were it is verified with
+   # the "verify_url" using the token introspection protocol (RFC7662) - the
+   # token can also be substituted into the query string if it contains {TOKEN}
+   #
+   # The "oauth2" server can be used to specify an oauth2 server that matches
+   # the path requirements for CSC signatures, or the "auth_url" and "token_url"
+   # can be specified to have this server proxy oauth2/authorize and oauth2/token
+   # to those URLs.
+   #
+   # The commented out example here would use Google OAuth2 as an authorization
+   # server - this won't work as it doesn't provide a "server" scope, but shows
+   # how it could be done.
+#  type: oauth2
+#  auth_url: "https://accounts.google.com/o/oauth2/v2/auth"
+#  token_url: "https://www.googleapis.com/oauth2/v4/token"
+#  verify_url: "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token={TOKEN}"
+#  scope: "service openid"     # CSC requires "service", but it can be changed here. "*" is wildcard for testing
+
+
+
+# The "shares" section describes the keystores that are shared. Multiple keystores
+# can be specified here, they will be presented as a single list on the network.
+# Each key will be prefixed with the keystore name plus a "/", but the "aliases"
+# section below can adjust this.
+shares:
+
+  sample:
+    type: "pkcs12"                    # File based keystores are pkcs12, jks or jceks (required)
+    path: "example-keystore.pkcs12"   # the filename to load the keystore from (required)
+    password: "password"              # the password to open the store (required)
+#    obfuscate_names: true            # if set to true, key identifiers will be replaced with something anonymous.
+                                      # Primarily useful for when auth is "open" and key_auth is "implicit",
+                                      # and only the "userid" passed into the list method distinguishes users.
+
+    # The optional "keys" sub-section in a share allows properties to be set per-key.
+    # In particular the "local_password" property is the password for the key, which needs to be specified
+    # if you don't want the physical password to be sent over there wire: it's required when using OTP
+    # or implicit passwords. If the "share_password" property is also set, then it's used as a proxy:
+    # if the user enters the correct "share_password", the "local_password" is used.
+    keys:
+      "test-rsa-1024":
+        disabled: true              # Any key can be disabled by setting "disabled" to true
+      "test-rsa-2048":
+        local_password: "password"  # the password for the key in the keystore
+        share_password: "secret"    # the password we need the user to enter to unlock the key
+      "test-ec-521":
+        users: ["user2"]            # keys can be restricted to a specific list of users
+
+  yubikey:          
+    type: "pkcs11"                    # PKCS#11 based keystores use type="pkcs11"
+    disabled: true                    # Any share can be disabled by setting "disabled" to true
+    library: "/usr/local/lib/libykcs11.so"  # required (as would be specified in the PKCS#11 conf file)
+    password: "123456"                # the password to open the store (required)
+    # slot, slotlistindex, description, enabledmechanisms, disabledmechanisms can also be specified
+    
+    # Use of "local_password" and "share_password" is highly recommended for PKCS#11 keystores to prevent
+    # them locking a key after too many failed unlock attempts. 
+    keys:
+      "alias of key in keystore":
+        local_password: "12346"     # the password for the key in the keystore
+        share_password: "password"  # the password we need the user to enter to unlock the key
+
+
+
+# The "aliases" section specifies optional aliases for keys, changing the
+# default name they are shared by ("keystore name/key alias") to something else.
+aliases:
+  "mykey": "yubikey/alias of key in keystore"

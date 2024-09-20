@@ -1,3 +1,3 @@
-The two PKCS#12 keystores in this file both have a password of "password".
-The "ectest.pkcs12" file has a key called "eckey", and the "rsatest.pkcs12"
-file has a key called "rsakey"
+The PKCS#12 keystore in this directory has the password "password", and
+contains various self-signed RSA, EC and EdDSA keys of long validity and
+unlimited keyusage.

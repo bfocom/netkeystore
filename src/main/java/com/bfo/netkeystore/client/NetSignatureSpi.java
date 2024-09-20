@@ -1,4 +1,4 @@
-package com.bfo.netkeystore;
+package com.bfo.netkeystore.client;
 
 import java.io.*;
 import java.nio.*;
@@ -10,70 +10,29 @@ import com.bfo.json.*;
 public class NetSignatureSpi extends SignatureSpi {
 
     private final NetProvider provider;
-    private final String algo, sigAlgo, digestAlgo;
+    private final SignatureAlgorithm algo;
     private NetPrivateKey privateKey;
     private AlgorithmParameters params;
     private Signature verifySignature;
     private MessageDigest digest;
     private ByteBuffer noneDigest;
 
-    public NetSignatureSpi(Provider.Service service) throws NoSuchAlgorithmException {
-        if (!"Signature".equals(service.getType())) {
-            throw new IllegalArgumentException();
-        }
+    NetSignatureSpi(Provider.Service service) throws NoSuchAlgorithmException {
         this.provider = (NetProvider)service.getProvider();
-        this.algo = service.getAlgorithm();
-        int ix = algo.indexOf("with");
-        String digestAlgo = null, sigAlgo = null;
-        // TODO, investigate Ed25519, Ed448 and RSASSA-PSS. Latter is the only one that takes params
-        if (ix > 0) {
-            digestAlgo = algo.substring(0, ix);
-            sigAlgo = algo.substring(ix + 4);
-            switch (digestAlgo) {
-                case "NONE":
-                    digestAlgo = "NONE";
-                    break;
-                case "SHA224":
-                    digestAlgo = "SHA-224";
-                    break;
-                case "SHA256":
-                    digestAlgo = "SHA-256";
-                    break;
-                case "SHA384":
-                    digestAlgo = "SHA-384";
-                    break;
-                case "SHA512":
-                    digestAlgo = "SHA-512";
-                    break;
-                case "SHA3-224":
-                case "SHA3-256":
-                case "SHA3-384":
-                case "SHA3-512":
-                    break;
-                default:
-                    digestAlgo = null;
-            }
-            switch (sigAlgo) {
-                case "RSA":
-                case "ECDSA":
-                    break;
-                default:
-                    sigAlgo = null;
-            }
+        String algoName = service.getAlgorithm();
+        this.algo = provider.getCore().getSignatureAlgorithm(algoName);
+        if (algo == null) {
+            throw new NoSuchAlgorithmException(algoName);
         }
-        if (sigAlgo == null || digestAlgo == null) {
-            throw new NoSuchAlgorithmException(algo);
-        }
-        this.sigAlgo = sigAlgo;
-        this.digestAlgo = digestAlgo;
-        this.digest = "NONE".equals(digestAlgo) ? null : MessageDigest.getInstance(digestAlgo);
-        this.noneDigest = "NONE".equals(digestAlgo) ? ByteBuffer.allocate(512) : null;
+        algoName = algo.name();
+        this.digest = algo.digestAlgorithm() == null ? null : MessageDigest.getInstance(algo.digestAlgorithm());
+        this.noneDigest = digest == null ? null : ByteBuffer.allocate(512);
         for (Provider provider : Security.getProviders()) {
             if (!(provider instanceof NetProvider)) {
                 try {
-                    this.verifySignature = Signature.getInstance(algo, provider);
+                    this.verifySignature = Signature.getInstance(algoName, provider);
                     break;
-                } catch (Exception e) {}
+                } catch (Exception e) { }
             }
         }
     }
@@ -81,8 +40,9 @@ public class NetSignatureSpi extends SignatureSpi {
     //------------------------------------------------------------------------
 
     /**
-     * @SuppressWarnings("deprecation")
+     * @SuppressWarnings({"deprecation", "dep-ann"})
      * @deprecated
+     * @Deprecated
      */
     protected Object engineGetParameter(String param) {
         throw new InvalidParameterException();
@@ -100,16 +60,9 @@ public class NetSignatureSpi extends SignatureSpi {
         if (!(privateKey instanceof NetPrivateKey)) {
             throw new InvalidKeyException("Key is " + (privateKey == null ? "null" : privateKey.getClass().getName()));
         }
-        String keyAlgo = privateKey.getAlgorithm();
-        if (!sigAlgo.equals(keyAlgo)) {
-            if (keyAlgo.equals("EC")) {
-                keyAlgo = "ECDSA";
-            }
-            if (!sigAlgo.equals(keyAlgo)) {
-                throw new InvalidKeyException("Key is not suitable for " + sigAlgo);
-            }
-        }
-        this.privateKey = (NetPrivateKey)privateKey;
+        final NetPrivateKey key = (NetPrivateKey)privateKey;
+        key.getServer().canSign(key, algo);
+        this.privateKey = key;
         if (this.digest != null) {
             this.digest.reset();
         } else {
@@ -123,7 +76,8 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     /**
-     * @SuppressWarnings("deprecation")
+     * @SuppressWarnings({"deprecation", "dep-ann"})
+     * @Deprecated
      * @deprecated
      */
     protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
@@ -132,7 +86,7 @@ public class NetSignatureSpi extends SignatureSpi {
 
     protected void engineSetParameter(AlgorithmParameterSpec paramSpec) throws InvalidAlgorithmParameterException {
         try {
-            AlgorithmParameters params = AlgorithmParameters.getInstance(algo);
+            AlgorithmParameters params = AlgorithmParameters.getInstance(algo.oid());
             params.init(paramSpec);
             this.params = params;
         } catch (NoSuchAlgorithmException e) {
@@ -199,9 +153,7 @@ public class NetSignatureSpi extends SignatureSpi {
             throw new SignatureException("Not initialized for signing");
         }
         try {
-            RemoteSupplier supplier = privateKey.getRemoteSupplier();
-            String keyname = privateKey.getName();
-            KeyStore.ProtectionParameter prot = privateKey.getProtectionParameter();
+            Server server = privateKey.getServer();
             byte[] data;
             if (digest != null) {
                 data = digest.digest();
@@ -209,7 +161,7 @@ public class NetSignatureSpi extends SignatureSpi {
                 data = new byte[noneDigest.position()];
                 noneDigest.flip().get(data);
             }
-            return provider.getEngine().requestSignature(supplier, keyname, privateKey.getStorePassword(), prot, sigAlgo, digestAlgo, params, data);
+            return server.sign(privateKey, algo, params, data);
         } catch (UnrecoverableKeyException e) {
             throw new SignatureException(e);
         } catch (IOException e) {

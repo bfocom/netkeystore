@@ -1,4 +1,4 @@
-package com.bfo.netkeystore;
+package com.bfo.netkeystore.client;
 
 import java.security.*;
 import java.security.cert.Certificate;
@@ -8,14 +8,15 @@ import java.io.*;
 
 public class NetKeyStoreSpi extends KeyStoreSpi {
 
-    private final NetProvider provider;
-    private Map<String,KeyStore.Entry> entries;
+    private final Core core;
+    private final Map<String,KeyStore.Entry> entries;
 
-    public NetKeyStoreSpi(Provider.Service service) {
-        this.provider = (NetProvider)service.getProvider();
+    NetKeyStoreSpi(Provider.Service service) {
+        this.core = ((NetProvider)service.getProvider()).getCore();
+        this.entries = core.getEntries();
     }
 
-    synchronized Map<String,KeyStore.Entry> getEntries() {
+    private Map<String,KeyStore.Entry> getEntries() {
         return entries;
     }
 
@@ -119,7 +120,10 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
     }
     @Override public final void engineLoad(KeyStore.LoadStoreParameter prot) throws IOException {
         try {
-            entries = provider.getEngine().requestKeyStores(prot == null ? null : prot.getProtectionParameter());
+            if (!core.isConnected()) {
+                core.login(null, prot == null ? null : prot.getProtectionParameter());
+            }
+            core.load();
         } catch (UnrecoverableKeyException e) {
             throw new IOException(e);
         }

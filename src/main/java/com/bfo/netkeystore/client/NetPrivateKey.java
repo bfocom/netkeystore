@@ -1,25 +1,28 @@
-package com.bfo.netkeystore;
+package com.bfo.netkeystore.client;
 
 import java.security.*;
 import java.security.interfaces.*;
 import java.security.spec.*;
-import java.nio.charset.*;
+import java.util.*;
 import com.bfo.json.*;
 
 class NetPrivateKey implements PrivateKey, Cloneable {
 
-    private final JWK jwk;
-    private final RemoteSupplier supplier;
+    private final Server server;
     private final String name, algname;
-    private final char[] storepassword;
+    private final Json json;
     private KeyStore.ProtectionParameter protection;
 
-    NetPrivateKey(RemoteSupplier supplier, String name, String algname, JWK jwk, char[] storepassword) {
-        this.supplier = supplier;
+    /**
+     * @param name the key id
+     * @param algname the Java algorithm name of the key
+     * @param json the json data for the key
+     */
+    NetPrivateKey(Server server, String name, String algname, Json json) {
+        this.server = server;
         this.name = name;
         this.algname = algname;
-        this.jwk = jwk;
-        this.storepassword = storepassword;
+        this.json = json;
     }
 
     protected Object clone() {
@@ -39,19 +42,23 @@ class NetPrivateKey implements PrivateKey, Cloneable {
     }
 
     @Override public byte[] getEncoded() {
-        return jwk.toString().getBytes(StandardCharsets.UTF_8);
+        try {
+            return json.toString().getBytes("UTF-8");
+        } catch (Exception e) {
+            throw new RuntimeException(e);      // Can't happen
+        }
     }
 
-    RemoteSupplier getRemoteSupplier() {
-        return supplier;
-    }
-
-    char[] getStorePassword() {
-        return storepassword;
+    Server getServer() {
+        return server;
     }
 
     String getName() {
         return name;
+    }
+
+    Json getJson() {
+        return json;
     }
 
     NetPrivateKey withProtectionParameter(KeyStore.ProtectionParameter protection) {

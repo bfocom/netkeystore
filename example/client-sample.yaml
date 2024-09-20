@@ -1,12 +1,70 @@
-# A YAML Configuration file demonstrating how to configure a client.
-#
-# This is OPTIONAL - the default will search for keys on the network
-# using Zeroconf
+# A sample configuration file for the NetKeyStore client.
+# Client configuration is optional! If no configuration is specified
+# it will default to searching for servers using Zeroconf
  
-client:
-  # debug: true
-  self_signed: true   # Servers discovered by Zeroconf may use self-signed certs by default
-  servers:
-    # A list of servers. If none are specified, they will be discovered with zeroconf
-    myserver: "https://localhost:9876/"
+#zeroconf: true               # Listen for servers shared over Zeroconf? (default: true)
+#debug: true                  # Log network traffic to System.out? (default: false)
+#base: "/path/to/this/file"   # The optional absolute path to resolve any relative paths in this file
 
+# The "authorizations" section details where to store temporary authorizations like
+# access tokens. This section is optional, and all keys within it are also optional.
+# If no file is specified they will be saved in Java preferences,
+# If no password is specified, wherever they are saved they will be unencrypted.
+authorizations:
+  keystore: "authorizations.json"     # filename to save authorizations
+#  password: "password"               # password to encrypt authorizations
+
+
+# The "servers" section defines the set signature services to connect to.
+# Multiple indepdent servers can be specified. The "type" property is required
+# for each (the only current value is "csc"). Other properties very by type.
+#
+# If "Zeroconf" is true servers may be added to this list dynamically.
+#
+servers:
+
+  example:
+    type: "csc"                                 # Cloud Signature Consortium API
+    disabled: true                              # Set disabled=true to disable a server temporarily
+    url: "https://cs-try.ssl.com/csc/v0"        # URL to connect to (required).
+#    timeout: 15                                 # timeout (in seconds) for network operations (default: 15)
+
+    client:
+      keystore: "keystore.pkcs12"               # For HTTPS servers, the keystore to load the trusted certificates
+      password: "password"                      # from. If "password" is set it may also contain client certificates.
+#      keystore: "insecure"                      # The special value "insecure" will accept any server certificates.
+
+    basic:                                      # If the server uses "basic" authorization:
+      username: "username"                      #   "username" should be set, or it will be requested via a NameCallback
+      password: "password"                      #   "password" may be set, or the keystore password is used.
+
+    oauth2:                                     # If the server uses "oauth2" authorization:
+      client_id: "username"                     #   "client_id" should be set, or will be requested via a NameCallback
+      client_secret: "password"                 #   "client_secret" may be set, or the keystore password is used
+      redirect_uri: "https://localhost:9870/"   #   "redirect_uri" key is required.
+#      final_uri: "https://bfo.com"             #   (optional) "final_uri" is the url to end on after authorization
+#      flow: "authorization"                    #   (optional) "flow" can be "authorization" (the default) or "client credentials"
+#      state: false                             #   (optional) "state" is sent by default, but set this to false to disable.
+#      code_challenge_method: "S256"            #   (optional) "code_challenge_method" can be plain or S256 to use this protocol
+#      scope: "service"                         #   (optional) "scope" defaults to "service" but can be overridden
+      # OAuth2 is, of course, complicated. More options, including the ability to send non-standard properties, are
+      # described in the javadoc for OAuth2.java. User a CallbackHandler rather than char[] password for OAuth2
+
+      redirect_server:
+        keystore: "keystore.pkcs12"             #    If the oauth2 redirect_server must be HTTPS, this section specifies the
+        password: "password"                    #    "keystore" and "password" containing the server SSL certificates.
+
+      # OAuth2 is, of course, quite complicated. 
+      # -- keys beginning with "prot.auth." are set directly on the authorization request.
+      # -- "state" is sent and verified by default, but can be disabled with "prot.auth.state: false".
+      # -- Setting "prot.auth.code_challenge_method" will compute send the appropriate challenge.
+      # -- The scope defaults to "service", as in the spec, but can be overriden with "prot.auth.scope"
+      # -- if a URL must be opened to begin authoriation, the user will be notified by a TextOutputCallback sent to the
+      #    CallbackHandler passed in to keystore.load() (always use a KeyStore.CallbackHandlerProtection here)
+
+
+# The "aliases" section specifies optional aliases for keys, changing the
+# typically long names given by servers to shorter values in the local KeyStore.
+# Be warned, some implentations will change the alias of a key for different login session.
+aliases:
+  mykey: "example/780f0eea-7123-4084-bcc0-123456789abc"

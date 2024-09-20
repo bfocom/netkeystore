@@ -1,31 +1,72 @@
 # Net KeyStore
-![test](https://raw.githubusercontent.com/faceless2/netkeystore/main/aux/arrow.svg)
+Java Client and Server for creating remote digital signatures. Supports the network protocol from the [Cloud Signature Consortium](https://cloudsignatureconsortium.org)
 
-This project is an attempt to reconcile a problem in software development: development is becoming *more distributed*,
-with VMs, cloud based builds and distributed teams, while attestation is becoming *more localized* due to a requirement that
-HSM (hardware security modules) are used to store keys for signing software.
+Development is becoming **more distributed** as attestation is becoming **more localized**, due 
+to a requirement that HSM (hardware security modules) are used to store keys for signing software. The two solutions to this are 
+either manage your own Network HSM device, or outsource this to one of many Cloud-based signature providers.
 
-Network HSM devices are available but they are expensive, and presume you have somewhere to put them.
-USB HSMs like the Yubikey range are cheap, but need to be connected to a USB port on the machine doing the signing.
+This project provides solutions for both approaches:
+* A Java KeyStore that connects to Network Signing Service
+* A Java server that turns a local Keystore (software or PKCS#11) into a Network Signing Service.
 
-This project turns a local KeyStore into a network KeyStore. It has three aspects:
-
-* a server component which runs on the computer with the USB HSM, listening for signing requests
-* a client component which simulates a locally connected Key Store, but actually relays all operations to the server
-* the network protocol they communicate with, which is a trivial - stateless CBOR-over-HTTP, with service discovery using zeroconf.
+Tested, working and used daily by [BFO](https://bfo.com) to sign Jars on a server in one location with USB-based HSM in another.
 
 
-The server is written in Java and is tested with Yubikey FIPS 5 tokens, but should with with any PKCS#11 based HSM
-that can be used with Java (and also with software keystores like PKCS#12 files).
+## Client Component
+The `com.bfo.netkeystore.client` package is a standard `java.util.KeyStore` that wraps one or more network-based signature providers.
+The current implementation supports the API from the https://cloudsignatureconsortium.org (v1.0.4), but other protocols can be added.
+It can be used anywhere a regular `java.util.KeyStore` is used for signing:
 
-The client is also Java, and consists of a `java.security.Provider` providing a `java.security.KeyStore`.
-Zero configuration really applies here; any servers on the network are found automatically and combined
-into one KeyStore.
+```java
+import com.bfo.netkeystore.client.NetProvider;
 
-### Building and testing
+Provider provider = new NetProvider();
+provider.load(new FileInputStream("client-config.yaml"));
+KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
+keystore.load(null, password);
+PrivateKey key = (PrivateKey)keystore.getKey(alias, password);
+Signature signature = Signature.getInstance(algorith, provider);
+signature.initSign(key);
+signature.update(data);
+byte[] signatureBytes = signature.sign();
+```
 
-There are two dependencies: [JSON](https://faceless2.github.io/json) and [Zeroconf](https://faceless2.github.io/zeroconf) libraries, both written by BFO and included in the "lib" folder,
-so building is as simple as running `ant`. A single `netkeystore-1.0.jar` file is generated in `dist`
+Features:
+* Single Jar with no dependencies except Java 8 or later
+* Cloud Signature Consortium API implementation (API v1)
+  * supports "external", "TLS", "basic", "oauth2code" and "oauth2client" user authorization
+  * supports key authorization by explicit or implicit PIN and both online and offline OTP
+* Supports finding servers over Zeroconf, for no-configuration setup if the Server component is running on the network
+* Works with keytool and jarsigner
+
+See the `example/TestClient.java` for a full example, and `example/client-sample.yaml` for a documented configuration file.
+
+
+## Server Component
+The `com.bfo.netkeystore.server` package is a standalone webserver which implements
+a Cloud Signature Consortium RSSP (remoter signing service provider). It will wrap any `java.util.KeyStore`, and has been tested with
+file-based keystores (PKCS#12 and JKS) as well as hardware based PKCS#11 tokens (a USB Yubikey, containing a code-signing certificate).
+
+Features:
+* Single Jar with no dependencies except Java 8 or later
+* Cloud Signature Consortium API implementation (API v1)
+  * Supports "external", "basic" and "oauth2" authorization (which proxies to a third-party OAuth2 provider)
+  * Server supports HTTP and HTTPS
+  * JWT based tokens
+  * EC and RSA keys
+  * Explicit, implicit passwords supported. OTP passwords supported, with a sample implementation.
+  * Designed for extension and to accommodate CSC API v2
+* Supports announcing service over Zeroconf, for no-configuration setup with compatible clients.
+
+
+## Building and testing
+
+There are two dependencies:
+[JSON](https://faceless2.github.io/json) and [Zeroconf](https://faceless2.github.io/zeroconf) libraries,
+both written by BFO, included in the "lib" folder and will be built into the generated Jars. Building is as simple as running `ant`. Two Jars
+are created:
+* `netkeystore-client-2.0.jar` contains the Provider for use as a Java KeyStore
+* `netkeystore-server-2.0.jar` contains a Main class which starts a web-server and acts as the server implementation.
 
 Several example configurations are shown in the `example` folder. To start a server
 
@@ -33,13 +74,13 @@ Several example configurations are shown in the `example` folder. To start a ser
 # Start a server
 $ ant build
 $ cd example
-$ java -jar ../dist/netkeystore-1.0.jar --config server-sample.yaml
+$ java -jar ../dist/netkeystore-server-2.0.jar --config server-sample.yaml
 ```
 
-Alterantively double-click the `netkeystore` Jar for a simple GUI: the key icon in the system tray will load configurations
+Alternatively double-click the Jar for a simple GUI: the key icon in the system tray will load configurations
 and start/stop the server.
 
-Client use requires no configuration - to sign programatically:
+To sign a byte array programatically, using an client auto-configured with Zeroconf:
 
 ```java
 Provider provider = new com.bfo.netkeystore.NetProvider();
@@ -52,125 +93,241 @@ sig.update(data);
 byte[] sigbytes = sig.sign();
 ```
 
-Or to list keys with `keytool` and sign a Jar with `jarsigner`
+To sign a PDF with the [BFO PDF Library](https://bfo.com/products/pdf) using a configuration from a file
+```java
+Provider provider = new com.bfo.netkeystore.NetProvider();
+provider.load(new FileInputStream("config.yaml"));
+KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+keystore.load(null, password);
+PDF pdf = new PDF(new PDFReader(new File("input.pdf")));
+FormSignature sig = new FormSignature();
+SignatureHandlerFactory sigfactory = new AcrobatSignatureHandlerFactory();
+sig.sign(keystore, alias, password, sigfactory);
+pdf.getForm().getElements().put("Sig", sig);
+pdf.render(new FileOutputStream("signed.pdf"));
+```
+
+To list keys with `keytool`
 ```shell
-$ keytool -J-cp -Jnetkeystore-1.0.jar -providerClass com.bfo.netkeystore.NetProvider \
-    -keystore NONE -storetype NetKeyStore -list
+# Java 8+
+$ keytool -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
 
-Enter keystore password:  
-Keystore type: NETKEYSTORE
-Keystore provider: NetProvider
+# Java 9+
+$ keytool -providerPath netkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
+```
 
-Your keystore contains 2 entries
-
-ks1.eckey, null, PrivateKeyEntry, 
-Certificate fingerprint (SHA-256): 43:BA:30:57:8A:2C:DF:87:D3:78:C5:28:CA:90:99:3E:15:FB:A4:E4:F4:0E:47:18:83:18:59:48:C7:B9:28:93
-ks2.rsakey, null, PrivateKeyEntry, 
-Certificate fingerprint (SHA-256): 77:10:E8:3C:E8:2A:EE:37:95:91:0F:69:03:E7:64:0E:C2:7F:68:84:36:79:A2:EC:89:E9:9B:3A:AE:BA:C6:28
-
-$ jarsigner -J-cp -Jnetkeystore-1.0.jar -providerClass com.bfo.netkeystore.NetProvider \
-     -keystore NONE -storetype NetKeyStore myfile.jar "ks1.eckey"
-
-Enter Passphrase for keystore: 
-jar signed.
+To sign jars with `jarsigner`
+```
+$ jarsigner -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore myfile.jar "myalias"
 ```
 
 For those still using Apache Ant to build, the `<signjar>` task which calls `jarsigner` cab be used as shown here
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
-   storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider">
+   storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" providerarg="path/to/config.yaml">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
 ```
 
-Note that in Java 11 and earlier, use with `jarsigner` requires adding the provider as a system provider by appending
-a `security.provider._n_=com.bfo.netkeystore.NetProvider` line to `$JAVA_HOME/conf/security/java.security`
+In both cases the store password is the password to log into the service, and the key password is the password or OTP
+to unlock the key. If not using a configuration file, the `providerarg` can be omitted.
+
+For Java 9+ when using a OAuth2 authentication, the additional parameters `-J--add-modules -Jjdk.httpserver`
+may be required. This will only be the case where no previous authorization has been made.
+
+## Sample Client Configuration
+
+```yaml
+# A sample configuration file for the NetKeyStore client.
+# Client configuration is optional! If no configuration is specified
+# it will default to searching for servers using Zeroconf
+ 
+#zeroconf: true               # Listen for servers shared over Zeroconf? (default: true)
+#debug: true                  # Log network traffic to System.out? (default: false)
+#base: "/path/to/this/file"   # The optional absolute path to resolve any relative paths in this file
+
+# The "authorizations" section details where to store temporary authorizations like
+# access tokens. This section is optional, and all keys within it are also optional.
+# If no file is specified they will be saved in Java preferences,
+# If no password is specified, wherever they are saved they will be unencrypted.
+authorizations:
+  keystore: "authorizations.json"     # filename to save authorizations
+#  password: "password"               # password to encrypt authorizations
 
 
-## Network protocol
+# The "servers" section defines the set signature services to connect to.
+# Multiple indepdent servers can be specified. The "type" property is required
+# for each (the only current value is "csc"). Other properties very by type.
+#
+# If "Zeroconf" is true servers may be added to this list dynamically.
+#
+servers:
 
-The network protocol is intentionally trivial, with the intent it's easy to build a client in any language.
-Objects are sent as CBOR, but shown in their JSON equivalents below. Private keys are serialized as JWK format,
-minus any private information (the minimum required fields are just "kty" and "x5c")
+  example:
+    type: "csc"                                 # Cloud Signature Consortium API
+    disabled: true                              # Set disabled=true to disable a server temporarily
+    url: "https://cs-try.ssl.com/csc/v0"        # URL to connect to (required).
+#    timeout: 15                                 # timeout (in seconds) for network operations (default: 15)
 
+    client:
+      keystore: "keystore.pkcs12"               # For HTTPS servers, the keystore to load the trusted certificates
+      password: "password"                      # from. If "password" is set it may also contain client certificates.
+#      keystore: "insecure"                      # The special value "insecure" will accept any server certificates.
 
-```http
-POST /list-v1
-Content-type: application/cbor
-{
-  "auth":[
-    {
-      "type":"password",
-      "password":"secret"
-    }
-  ]
-}
+    basic:                                      # If the server uses "basic" authorization:
+      username: "username"                      #   "username" should be set, or it will be requested via a NameCallback
+      password: "password"                      #   "password" may be set, or the keystore password is used.
 
+    oauth2:                                     # If the server uses "oauth2" authorization:
+      client_id: "username"                     #   "client_id" should be set, or will be requested via a NameCallback
+      client_secret: "password"                 #   "client_secret" may be set, or the keystore password is used
+      redirect_uri: "https://localhost:9870/"   #   "redirect_uri" key is required.
+#      final_uri: "https://bfo.com"             #   (optional) "final_uri" is the url to end on after authorization
+#      flow: "authorization"                    #   (optional) "flow" can be "authorization" (the default) or "client credentials"
+#      state: false                             #   (optional) "state" is sent by default, but set this to false to disable.
+#      code_challenge_method: "S256"            #   (optional) "code_challenge_method" can be plain or S256 to use this protocol
+#      scope: "service"                         #   (optional) "scope" defaults to "service" but can be overridden
 
-HTTP/1.1 200 OK
-Content-type: application/cbor
-{
-  "type":"list-v1",
-  "keys":{
-    "ks1.eckey":{
-      "kty": "EC",
-      "alg": "ES256",
-      "crv": "P-256",
-      "x5c":["MIIB9zCCAZygAwIBAgIJAMmeEVyfIStoMAoGCCqGSM49BAMCMG8xCzAJBgNVBAYTAlpaMRAwDgYDVQQIEwdVbmtub3duMRIwEAYDVQQHEwlUZXN0dmlsbGUxEjAQBgNVBAoTCVRlc3QgQ29ycDEQMA4GA1UECxMHVW5rbm93bjEUMBIGA1UEAxMLVGVzdCBUZXN0ZXIwHhcNMjQwNTI0MTgwMzIxWhcNMzQwNTIyMTgwMzIxWjBvMQswCQYDVQQGEwJaWjEQMA4GA1UECBMHVW5rbm93bjESMBAGA1UEBxMJVGVzdHZpbGxlMRIwEAYDVQQKEwlUZXN0IENvcnAxEDAOBgNVBAsTB1Vua25vd24xFDASBgNVBAMTC1Rlc3QgVGVzdGVyMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPVcUCbKebWjIYKwqwqiYvk7sfBc9KbIx1CoqWoSOsvbzrnwPgJK0-m5k-2Q-WrNyTrtVNHjXEBA1u5ACpBAGpaMhMB8wHQYDVR0OBBYEFA24mgMJaN5xWNERjVL98Il3EVpLMAoGCCqGSM49BAMCA0kAMEYCIQDJqRxNZBJEfXWfcjCmWS2PcNRjNdeWEsEY_dzxYm5UvwIhAOIbbHh1siJRxgNt0wR6su0RLFlFRcBikm3Cx7cwTfG2"
-     ]
-   },
-   "ks2.rsakey": {
-     "kty": "RSA",
-     "n":"AJ8p18rv4Kl2U8EUxWr5lz72HFM6KS_OyYnsJfAlL2Hm8FNN7ZLTmWpNF5CQSXSEu_ilQN-Lb3M9ZF5OT0hWJbpIldsyu1feiC1z4caWEB9s5MCQhget4jMERIThlRwYc2I0titRR1MQt3Dzmleab2v9e7vcIZrz1sMw1JPI2Q7TKveEkMf5pFHwpY6PIGIe3_zNT4PPEQJEIr5udDEksY-OUiQeSh3P4DbkmTGxFABwcA93VosUpwtzv_0QApNVANkAhNsQx7OmQ1HxLzLkXHOe7zdwVBZDzedGc4-B4gtVjzl6dwVv542jLE36bd2aKEeioXlIDzRxZC0ANE9nv5s",
-     "e":"AQAB",
-     "x5c":["MIIDgTCCAmmgAwIBAgIILd4t_grn9wowDQYJKoZIhvcNAQELBQAwbzELMAkGA1UEBhMCWloxEDAOBgNVBAgTB1Vua25vd24xEjAQBgNVBAcTCVRlc3R2aWxsZTESMBAGA1UEChMJVGVzdCBDb3JwMRAwDgYDVQQLEwdVbmtub3duMRQwEgYDVQQDEwtUZXN0IFRlc3RlcjAeFw0yNDA1MjQxODA0MDFaFw0zNDA1MjIxODA0MDFaMG8xCzAJBgNVBAYTAlpaMRAwDgYDVQQIEwdVbmtub3duMRIwEAYDVQQHEwlUZXN0dmlsbGUxEjAQBgNVBAoTCVRlc3QgQ29ycDEQMA4GA1UECxMHVW5rbm93bjEUMBIGA1UEAxMLVGVzdCBUZXN0ZXIwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCfKdfK7-CpdlPBFMVq-Zc-9hxTOikvzsmJ7CXwJS9h5vBTTe2S05lqTReQkEl0hLv4pUDfi29zPWReTk9IViW6SJXbMrtX3ogtc-HGlhAfbOTAkIYHreIzBESE4ZUcGHNiNLYrUUdTELdw85pXmm9r_Xu73CGa89bDMNSTyNkO0yr3hJDH-aRR8KWOjyBiHt_8zU-DzxECRCK-bnQxJLGPjlIkHkodz-A25JkxsRQAcHAPd1aLFKcLc7_9EAKTVQDZAITbEMezpkNR8S8y5Fxznu83cFQWQ83nRnOPgeILVY85encFb-eNoyxN-m3dmihHoqF5SA80cWQtADRPZ7-bAgMBAAGjITAfMB0GA1UdDgQWBBQi1SStxcO_fC-gPDCfi4LydNRNnjANBgkqhkiG9w0BAQsFAAOCAQEAPyEIi0dGPLNt52z4laj_aFbYbz2dQKNRbZzu_a5OWuuxlIYafcB1RzEqbe3lXIA4448aAneOpUUpmtlFjM_lzLm1A1F8Hs7uzhrp64TL79fwEaeGxE5-y_KgE23Pnoee8kWV-VdG-1yRxQ79pLB1rVci675qr8DJBFHniaWXZPkKv7jJpxcVT1WqlrlNoNiRrT1K62I9byZ8QRFHfzPARN1eO7SgHxfkHDb3lrXp9nsG_kNybfJN769y5sC-Wsfdtv5FS6VF2jpSXBh-mxrg3xKsJ7e9JrGymoJABssPNdSKvgeJf56molYS8YgdCKp_LJXV_30DPiZRZ3rlFOgPsg"]
-    }
-  }
-}
+      # OAuth2 is, of course, complicated. More options, including the ability to send non-standard properties, are
+      # described in the javadoc for OAuth2.java. User a CallbackHandler rather than char[] password for OAuth2
 
+      redirect_server:
+        keystore: "keystore.pkcs12"             #    If the oauth2 redirect_server must be HTTPS, this section specifies the
+        password: "password"                    #    "keystore" and "password" containing the server SSL certificates.
 
-POST /sign-v1
-Content-type: application/cbor
-{
-  "key": "ks1.eckey",
-  "sig_alg": "ECDSA",
-  "digest_alg": "SHA256",
-  "digest": "zQDiksWXDTxeLw_6UXHlVbxGv8T63ftKQYtoQLhueaM",
-  "auth":[
-    {
-      "type": "password",
-      "for": "ks1",
-      "password": "secret"
-    }, {
-      "type": "password",
-      "for": "ks1.eckey",
-      "password": "secret"
-    }
-  ]
-}
-
-HTTP/1.1 200 OK
-Content-type: application/cbor
-{
-  "type": "sign-v1",
-  "signature": "MEQCIGLK9crNtoHSiCl4nDN-Z7F_ZdmF4uMANnGOY1a6xmOXAiBUdANsOFk5VBQqdL0MY4f9aiz2JVaAdijsqPeeOdwBXg"
-}
+# The "aliases" section specifies optional aliases for keys, changing the
+# typically long names given by servers to shorter values in the local KeyStore.
+# Be warned, some implentations will change the alias of a key for different login session.
+aliases:
+  mykey: "example/780f0eea-7123-4084-bcc0-123456789abc"
 ```
 
-Zeroconf is used to advertise the services, using the `_netkeystore._tcp` service name. The TXT record may contain
-`secure=true` to state the server uses HTTPS, and a `path=/prefix` property to add a prefix for HTTP requests.
+### Sample Server Configuration
+```yaml
+# A sample configuration file for the NetKeyStore server.
 
-## TODO
+name: "MyKeyServer"         # The name of the server (required)
+zeroconf: true              # Announce server over zeroconf? (default: true)
+#debug: true                # Log network traffic to System.out? (default: false)
+#base: "path/to/this/file"  # The optional base against which to resolve any relative paths in this file
+port: 18001                 # The port to run the webserver on (default: 0, to auto-select)
+#version: "1.0.3"           # The version number to claim to support (default: "1.0.3")
+#max_input_buf: 8192        # The maximum number of bytes in a client request (default: 8192)
+#prefix: "/prefix/"         # The prefix for the URLs served by this server (default: none)
+#url: "http://blah.com"     # The URL to use when announcing this server on zeroconf (default: derived automatically)
+#static: "path/to/static"   # The path from which to serve static files if the URL doesn't match anything else (default: none)
 
-This is a very new project, but is working as described above. Supported are all signature algorithms of the form HASHwithKEY,
-where "HASH" is one of SHA224, SHA256, SHA384, SHA512, SHA3-224, SHA3-256, SHA3-384 and SHA3-512 and "KEY" is "RSA" or "ECDSA".
+# The optional "info" map can specify any other properties that need to be reported on the "info" URL.
+info:
+  description: "An example CSC server"
 
-Todo are:
+# The "key_auth" section is optional, and determines how passwords for individual keys are unlocked.
+# If unset the client must supply the password (or share_password, see below), but if not the "type"
+# property must be a classname of an instanceof of KeyAuthorizationHandler, with any other properties
+# passed to that classes "configure" method. Alternatively the value "explicit" can be used to 
+# simply use the local_password (see below) for each key 
+key_auth:
+#  type: implicit                 # use the "local_password" field set on each key
+  type: explicit                 # the default: ask the client for the password
+#  type: com.bfo.netkeystore.server.SampleOnlineOTP   # class name of an implementation
 
-* Add RSAPSS, Ed25519 and Ed448
-* Config file format is a bit ad-hoc
-* Proof of concept in another language would be nice
-* Provider should probably implement AuthProvider
-* There's some nice looking hardware at https://nitrokey.com with an [API](https://nethsmdemo.nitrokey.com/api_docs/index.html) we could consider emulating?
 
+# The "https" section is optional. If specified the server will serve over HTTPS not HTTP.
+# It needs a KeyStore containing the HTTPS key and certificates - any keystore will do,
+# it's specified the same way as in the "shares" section.
+#https:
+#  type: "pkcs12"
+#  path: "example-keystore.pkcs12"
+#  password: "password"
+
+
+# The "auth" section determines how a client authenticates with this server.
+# This section is required; the "type" property specifies the method.
+auth:
+  # "open" authentication has no extra properties. No authentication is performed
+  type: open
+
+  # "basic" authentication requires a username/password from the client to login.
+  # The users are listed in the config file - each needs a "name" and password,
+  # currently specifiable as "plaintext" only. They may optionally have a list
+  # of credentials which determine which keys they can use; if unspecified, they
+  # can access all keys.
+#  type: basic
+#  users:
+#    -  { name: "user1", plaintext: "password" }
+#    -  { name: "user2", plaintext: "password" }
+
+   # "oauth2" authentication uses a third-party server to to the authentication.
+   # The access_token is then passed into this server, were it is verified with
+   # the "verify_url" using the token introspection protocol (RFC7662) - the
+   # token can also be substituted into the query string if it contains {TOKEN}
+   #
+   # The "oauth2" server can be used to specify an oauth2 server that matches
+   # the path requirements for CSC signatures, or the "auth_url" and "token_url"
+   # can be specified to have this server proxy oauth2/authorize and oauth2/token
+   # to those URLs.
+   #
+   # The commented out example here would use Google OAuth2 as an authorization
+   # server - this won't work as it doesn't provide a "server" scope, but shows
+   # how it could be done.
+#  type: oauth2
+#  auth_url: "https://accounts.google.com/o/oauth2/v2/auth"
+#  token_url: "https://www.googleapis.com/oauth2/v4/token"
+#  verify_url: "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token={TOKEN}"
+#  scope: "service openid"     # CSC requires "service", but it can be changed here. "*" is wildcard for testing
+
+
+
+# The "shares" section describes the keystores that are shared. Multiple keystores
+# can be specified here, they will be presented as a single list on the network.
+# Each key will be prefixed with the keystore name plus a "/", but the "aliases"
+# section below can adjust this.
+shares:
+
+  sample:
+    type: "pkcs12"                    # File based keystores are pkcs12, jks or jceks (required)
+    path: "example-keystore.pkcs12"   # the filename to load the keystore from (required)
+    password: "password"              # the password to open the store (required)
+#    obfuscate_names: true            # if set to true, key identifiers will be replaced with something anonymous.
+                                      # Primarily useful for when auth is "open" and key_auth is "implicit",
+                                      # and only the "userid" passed into the list method distinguishes users.
+
+    # The optional "keys" sub-section in a share allows properties to be set per-key.
+    # In particular the "local_password" property is the password for the key, which needs to be specified
+    # if you don't want the physical password to be sent over there wire: it's required when using OTP
+    # or implicit passwords. If the "share_password" property is also set, then it's used as a proxy:
+    # if the user enters the correct "share_password", the "local_password" is used.
+    keys:
+      "test-rsa-1024":
+        disabled: true              # Any key can be disabled by setting "disabled" to true
+      "test-rsa-2048":
+        local_password: "password"  # the password for the key in the keystore
+        share_password: "secret"    # the password we need the user to enter to unlock the key
+      "test-ec-p521":
+        users: ["user2"]            # keys can be restricted to a specific list of users
+
+  yubikey:          
+    type: "pkcs11"                    # PKCS#11 based keystores use type="pkcs11"
+    disabled: true                    # Any share can be disabled by setting "disabled" to true
+    library: "/usr/local/lib/libykcs11.so"  # required (as would be specified in the PKCS#11 conf file)
+    password: "123456"                # the password to open the store (required)
+    # slot, slotlistindex, description, enabledmechanisms, disabledmechanisms can also be specified
+    
+    # Use of "local_password" and "share_password" is highly recommended for PKCS#11 keystores to prevent
+    # them locking a key after too many failed unlock attempts. 
+    keys:
+      "alias of key in keystore":
+        local_password: "12346"     # the password for the key in the keystore
+        share_password: "password"  # the password we need the user to enter to unlock the key
+
+
+
+# The "aliases" section specifies optional aliases for keys, changing the
+# default name they are shared by ("keystore name/key alias") to something else.
+aliases:
+  "mykey": "yubikey/alias of key in keystore"
+```

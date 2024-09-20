@@ -8,10 +8,14 @@
   <property name="classes.main" value="build/main"/>	<!-- where to compile the classes -->
   <property name="docs" value="docs"/>
   <property name="src.main" value="src/main/java"/>
-  <property name="jar.main" value="${dist}/netkeystore-${version}.jar"/>
+  <property name="jar.client" value="${dist}/netkeystore-client-${version}.jar"/>
+  <property name="jar.server" value="${dist}/netkeystore-server-${version}.jar"/>
 
   <path id="path.build">
     <fileset dir="lib" includes="*.jar"/>
+  </path>
+  <path id="srcpath.client">
+    <fileset dir="" includes="*.jar"/>
   </path>
 
   <target name="clean">
@@ -22,9 +26,12 @@
 
   <target name="build">
     <mkdir dir="${classes.main}"/>
+    <mkdir dir="${classes.main}/client"/>
+    <mkdir dir="${classes.main}/server"/>
     <mkdir dir="${dist}"/>
-    <javac encoding="utf-8" debug="true" source="8" target="8" destdir="${classes.main}">
+    <javac encoding="utf-8" debug="true" source="8" target="8" destdir="${classes.main}/client">
       <src path="${src.main}"/>
+      <exclude name="com/bfo/netkeystore/server/**"/>
       <compilerarg value="-Xlint:unchecked"/>
       <compilerarg value="-Xlint:rawtypes"/>
       <compilerarg value="-Xlint:deprecation"/>
@@ -32,19 +39,54 @@
       <compilerarg value="-Xlint:overrides"/>
       <classpath refid="path.build" />
     </javac>
-    <copy todir="${classes.main}">
+    <copy todir="${classes.main}/client">
       <fileset dir="${src.main}">
+        <exclude name="com/bfo/netkeystore/server/**"/>
         <exclude name="**/*.java"/>
       </fileset>
     </copy>
-    <jar jarfile="${jar.main}" update="false">
-      <fileset dir="${classes.main}" />
+    <jar jarfile="${jar.client}" update="false">
+      <fileset dir="${classes.main}/client" />
       <zipgroupfileset file="lib/bfojson-2.0.jar"/>
-      <zipgroupfileset file="lib/zeroconf-1.0.jar"/>
+      <zipgroupfileset file="lib/zeroconf-1.0.2.jar"/>
       <manifest>
         <attribute name="Build-By" value="${user.name}/${java.version}"/>
         <attribute name="Build-Host" value="${hostname}"/>
-        <attribute name="Main-Class" value="com.bfo.netkeystore.Server"/>
+        <attribute name="Implementation-Title" value="${ant.project.name}"/>
+        <attribute name="Implementation-Version" value="${version}"/>
+        <attribute name="Sealed" value="true"/>
+        <attribute name="Index" value="true"/>
+        <attribute name="Permissions" value="all-permissions"/>
+        <attribute name="Codebase" value="*"/>
+        <attribute name="Caller-Allowable-Codebase" value="*"/>
+        <attribute name="Application-Library-Allowable-Codebase" value="*"/>
+      </manifest>
+    </jar>
+
+    <javac encoding="utf-8" debug="true" source="8" target="8" destdir="${classes.main}/server">
+      <src path="${src.main}"/>
+      <exclude name="com/bfo/netkeystore/client/**"/>
+      <compilerarg value="-Xlint:unchecked"/>
+      <compilerarg value="-Xlint:rawtypes"/>
+      <compilerarg value="-Xlint:deprecation"/>
+      <compilerarg value="-Xlint:finally"/>
+      <compilerarg value="-Xlint:overrides"/>
+      <classpath refid="path.build" />
+    </javac>
+    <copy todir="${classes.main}/server">
+      <fileset dir="${src.main}">
+        <exclude name="com/bfo/netkeystore/client/**"/>
+        <exclude name="**/*.java"/>
+      </fileset>
+    </copy>
+    <jar jarfile="${jar.server}" update="false">
+      <fileset dir="${classes.main}/server" />
+      <zipgroupfileset file="lib/bfojson-2.0.jar"/>
+      <zipgroupfileset file="lib/zeroconf-1.0.2.jar"/>
+      <manifest>
+        <attribute name="Build-By" value="${user.name}/${java.version}"/>
+        <attribute name="Build-Host" value="${hostname}"/>
+        <attribute name="Main-Class" value="com.bfo.netkeystore.server.Server"/>
         <attribute name="Implementation-Title" value="${ant.project.name}"/>
         <attribute name="Implementation-Version" value="${version}"/>
         <attribute name="Application-Name" value="NetKeyStore Server"/>
