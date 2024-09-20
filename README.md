@@ -15,20 +15,14 @@ Tested, working and used daily by [BFO](https://bfo.com) to sign Jars on a serve
 ## Client Component
 The `com.bfo.netkeystore.client` package is a standard `java.util.KeyStore` that wraps one or more network-based signature providers.
 The current implementation supports the API from the https://cloudsignatureconsortium.org (v1.0.4), but other protocols can be added.
-It can be used anywhere a regular `java.util.KeyStore` is used for signing:
+It can be used anywhere a regular `java.util.KeyStore` is used for signing, so usage is trivial:
 
 ```java
-import com.bfo.netkeystore.client.NetProvider;
-
 Provider provider = new NetProvider();
-provider.load(new FileInputStream("client-config.yaml"));
+provider.load(new FileInputStream("config.yaml"));
 KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
-PrivateKey key = (PrivateKey)keystore.getKey(alias, password);
-Signature signature = Signature.getInstance(algorith, provider);
-signature.initSign(key);
-signature.update(data);
-byte[] signatureBytes = signature.sign();
+// it's a regular java.security.KeyStore. Get the keys from it and sign as normal.
 ```
 
 Features:
@@ -114,6 +108,11 @@ sig.sign(keystore, alias, password, sigfactory);
 pdf.getForm().getElements().put("Sig", sig);
 pdf.render(new FileOutputStream("signed.pdf"));
 ```
+
+A more complete example is in the "example" folder, but the main advantage it has over these
+code snippets is it uses a `Keystore.CallbackHandlerProtection` for authorization rather than
+a `char[] password`. This is recommended in general, and is necessary for OAuth2 authorization as
+a Callback is used to notify the client of the URL to be opened for authorization.
 
 To list keys with `keytool`
 ```shell
