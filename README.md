@@ -84,7 +84,7 @@ To sign a byte array programatically, using an client auto-configured with Zeroc
 
 ```java
 Provider provider = new com.bfo.netkeystore.NetProvider();
-KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
 PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
 Signature sig = Signature.getInstance(alg, provider);
@@ -97,7 +97,7 @@ To sign a PDF with the [BFO PDF Library](https://bfo.com/products/pdf) using a c
 ```java
 Provider provider = new com.bfo.netkeystore.NetProvider();
 provider.load(new FileInputStream("config.yaml"));
-KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
 PDF pdf = new PDF(new PDFReader(new File("input.pdf")));
 FormSignature sig = new FormSignature();
