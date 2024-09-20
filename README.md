@@ -1,12 +1,12 @@
 # Net KeyStore
-Java Client and Server for creating remote digital signatures. Supports the network protocol from the [Cloud Signature Consortium](https://cloudsignatureconsortium.org)
+Java Client and Server for creating remote digital signatures. Supports the network API from the [Cloud Signature Consortium](https://cloudsignatureconsortium.org)
 
 Development is becoming **more distributed** as attestation is becoming **more localized**, due 
 to a requirement that HSM (hardware security modules) are used to store keys for signing software. The two solutions to this are 
 either manage your own Network HSM device, or outsource this to one of many Cloud-based signature providers.
 
 This project provides solutions for both approaches:
-* A Java KeyStore that connects to Network Signing Service
+* A Java KeyStore that connects to Network Signing Services
 * A Java server that turns a local Keystore (software or PKCS#11) into a Network Signing Service.
 
 Tested, working and used daily by [BFO](https://bfo.com) to sign Jars on a server in one location with USB-based HSM in another.
@@ -83,8 +83,11 @@ and start/stop the server.
 To sign a byte array programatically, using an client auto-configured with Zeroconf:
 
 ```java
-Provider provider = new com.bfo.netkeystore.NetProvider();
-KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+import new com.bfo.netkeystore.client.NetProvider;
+import java.security.*;
+
+Provider provider = new NetProvider();
+KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
 PrivateKey privkey = (PrivateKey)keystore.getKey(alias, password);
 Signature sig = Signature.getInstance(alg, provider);
@@ -95,11 +98,16 @@ byte[] sigbytes = sig.sign();
 
 To sign a PDF with the [BFO PDF Library](https://bfo.com/products/pdf) using a configuration from a file
 ```java
-Provider provider = new com.bfo.netkeystore.NetProvider();
+import com.bfo.netkeystore.client.NetProvider;
+import java.security.*;
+import java.io.*;
+import org.faceless.pdf2.*;
+
+Provider provider = new NetProvider();
 provider.load(new FileInputStream("config.yaml"));
-KeyStore keystore = KeyStore.getInstance("NetKeyStore", provider);
+KeyStore keystore = KeyStore.getInstance(NetProvider.KEYSTORE_TYPE, provider);
 keystore.load(null, password);
-PDF pdf = new PDF(new PDFReader(new File("input.pdf")));
+PDF pdf = new PDF(new PDFReader(new FileInputStream("input.pdf")));
 FormSignature sig = new FormSignature();
 SignatureHandlerFactory sigfactory = new AcrobatSignatureHandlerFactory();
 sig.sign(keystore, alias, password, sigfactory);
@@ -110,24 +118,31 @@ pdf.render(new FileOutputStream("signed.pdf"));
 To list keys with `keytool`
 ```shell
 # Java 8+
-$ keytool -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
+$ keytool -J-cp -Jnetkeystore-client-2.0.jar \
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore -list -v
 
 # Java 9+
-$ keytool -providerPath netkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
+$ keytool -providerPath netkeystore-client-2.0.jar \
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore -list -v
 ```
 
 To sign jars with `jarsigner`
 ```
-$ jarsigner -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore myfile.jar "myalias"
+$ jarsigner -J-cp -Jnetkeystore-client-2.0.jar \
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore myfile.jar "myalias"
 ```
 
 For those still using Apache Ant to build, the `<signjar>` task which calls `jarsigner` cab be used as shown here
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
-   storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" providerarg="path/to/config.yaml">
+     storetype="NetKeyStore" keystore="NONE"
+     providerclass="com.bfo.netkeystore.client.NetProvider" providerarg="path/to/config.yaml">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
