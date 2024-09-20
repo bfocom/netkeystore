@@ -1,12 +1,12 @@
 # Net KeyStore
-Java Client and Server for creating remote digital signatures. Supports the network protocol from the [Cloud Signature Consortium](https://cloudsignatureconsortium.org)
+Java Client and Server for creating remote digital signatures. Supports the network API from the [Cloud Signature Consortium](https://cloudsignatureconsortium.org)
 
 Development is becoming **more distributed** as attestation is becoming **more localized**, due 
 to a requirement that HSM (hardware security modules) are used to store keys for signing software. The two solutions to this are 
 either manage your own Network HSM device, or outsource this to one of many Cloud-based signature providers.
 
 This project provides solutions for both approaches:
-* A Java KeyStore that connects to Network Signing Service
+* A Java KeyStore that connects to Network Signing Services
 * A Java server that turns a local Keystore (software or PKCS#11) into a Network Signing Service.
 
 Tested, working and used daily by [BFO](https://bfo.com) to sign Jars on a server in one location with USB-based HSM in another.
