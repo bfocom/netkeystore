@@ -110,24 +110,31 @@ pdf.render(new FileOutputStream("signed.pdf"));
 To list keys with `keytool`
 ```shell
 # Java 8+
-$ keytool -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
+$ keytool -J-cp -Jnetkeystore-client-2.0.jar \
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore -list -v
 
 # Java 9+
-$ keytool -providerPath netkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore -list -v
+$ keytool -providerPath netkeystore-client-2.0.jar
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore -list -v
 ```
 
 To sign jars with `jarsigner`
 ```
-$ jarsigner -J-cp -Jnetkeystore-client-2.0.jar -providerClass com.bfo.netkeystore.client.NetProvider \
-     -providerarg path/to/config.yaml -keystore NONE -storetype NetKeyStore myfile.jar "myalias"
+$ jarsigner -J-cp -Jnetkeystore-client-2.0.jar \
+     -providerClass com.bfo.netkeystore.client.NetProvider \
+     -providerarg path/to/config.yaml \
+     -keystore NONE -storetype NetKeyStore myfile.jar "myalias"
 ```
 
 For those still using Apache Ant to build, the `<signjar>` task which calls `jarsigner` cab be used as shown here
 ```xml
 <signjar jar="${jar}" alias="${alias}" digestalg="SHA-256" storepass="password"
-   storetype="NetKeyStore" keystore="NONE" providerclass="com.bfo.netkeystore.NetProvider" providerarg="path/to/config.yaml">
+     storetype="NetKeyStore" keystore="NONE"
+     providerclass="com.bfo.netkeystore.NetProvider" providerarg="path/to/config.yaml">
   <arg value="-J-cp"/>
   <arg value="-J${buildlib}/netkeystore-1.0.jar"/>
 </signjar>
