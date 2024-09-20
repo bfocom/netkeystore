@@ -207,13 +207,13 @@ class Core {
 
     void warning(String msg) {
         try {
-            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);
-        } catch (Throwable e) {
-            try {
-                java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
-            } catch (Throwable e2) {
-                System.out.println("WARNING: " + msg);
-            }
+            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);   // If compiling under Java8, remove this line
+            return;                                                                                 // If compiling under Java8, remove this line
+        } catch (Throwable e) {}
+        try {
+            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
+        } catch (Throwable e2) {
+            System.out.println("WARNING: " + msg);
         }
     }
 

@@ -132,7 +132,7 @@ class CSCServer implements Server {
             if (!"GET".equals(method) && !"POST".equals(method) && !"OPTIONS".equals(method) && !"HEAD".equals(method) && !"DELETE".equals(method)) {
                 throw new IllegalArgumentException("Invalid method");
             }
-            HttpURLConnection con = (HttpURLConnection)(new URL(url).openConnection());
+            HttpURLConnection con = (HttpURLConnection)(new URI(url).toURL().openConnection());
             if (con instanceof HttpsURLConnection && clientssl != null) {
                 ((HttpsURLConnection)con).setSSLSocketFactory(clientssl.getSocketFactory());
                 if (hostnameVerifier != null) {

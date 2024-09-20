@@ -159,7 +159,8 @@ public class NetSignatureSpi extends SignatureSpi {
                 data = digest.digest();
             } else {
                 data = new byte[noneDigest.position()];
-                noneDigest.flip().get(data);
+                noneDigest.flip();
+                noneDigest.get(data);
             }
             return server.sign(privateKey, algo, params, data);
         } catch (UnrecoverableKeyException e) {

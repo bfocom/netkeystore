@@ -131,6 +131,10 @@ public class Server {
         return usedport;
     }
 
+    /**
+     * Set the CallbackHandler to use for passwords, or null to retrieve them from the config file
+     * @param handler the handler
+     */
     public void setCallbackHandler(CallbackHandler handler) {
         this.callbackHandler = handler;
     }
@@ -149,6 +153,7 @@ public class Server {
     /**
      * Configure the Server
      * @param in an InputStream containing a YAML configuration. The stream is not closed
+     * @param base the optional File against which any relative paths in the configuration are resolved against. Normally the absolute path of the configuration file.
      * @throws Exception if the configuration is invalid for any reason
      */
     public void configure(InputStream in, File base) throws Exception {
@@ -273,6 +278,7 @@ public class Server {
 
     /**
      * Reload any KeyStores
+     * @throws Exception if the keystore won't load
      */
     public void reload() throws Exception {
         credentials = new CredentialCollection(this);
@@ -281,6 +287,7 @@ public class Server {
 
     /**
      * Start the webserver
+     * @throws Exception if the server won't start
      */
     public void start() throws Exception {
         if (isStarted()) {
@@ -397,6 +404,7 @@ public class Server {
 
     /**
      * Stop the webserver
+     * @throws InterruptedException if the server was interruped while stopping
      */
     public void stop() throws InterruptedException {
         if (!isStarted()) {
@@ -839,7 +847,8 @@ public class Server {
                     }
                     // TODO attributes
                 }
-                provider = provider.configure(sb.toString());
+                provider = provider.configure(sb.toString());   // If compiling under Java8, uncomment next line instead
+                // provider = new sun.security.pkcs11.SunPKCS11(new ByteArrayInputStream(sb.toString().getBytes("UTF-8")));
                 path = null;
             } else {
                 if (providerName != null) {
@@ -882,7 +891,11 @@ public class Server {
             };
             KeyStore keystore = null;
             if (provider == null && path != null) {
-                keystore = KeyStore.getInstance(new File(base, path), loadParam);
+                // Next line is Java 9 or later. Java 8 can't combine CallbackHandler and file-based keystores.
+                // If you're on Java 8, comment out the below line and uncomment the following two
+                keystore = KeyStore.getInstance(new File(base, path), loadParam);       // If Java 8, see below
+                // keystore = KeyStore.getInstance(type);
+                // keystore.load(new FileInputStream(new File(base, path)), ((KeyStore.PasswordProtection)prot).getPassword());
             } else {
                 if (provider == null) {
                     keystore = KeyStore.getInstance(type);

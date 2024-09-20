@@ -6,8 +6,7 @@ import java.security.PrivateKey;
 import com.sun.net.httpserver.*;
 
 /**
- * The KeyAuthorizationHandler can be implemented to add support for OTP passwords or implicit
- * key unlocking, eg based on the authorized user
+ * The KeyAuthorization manages the unlocking strategey for keys. There is one per Server.
  */
 public interface KeyAuthorization {
 
@@ -63,46 +62,47 @@ public interface KeyAuthorization {
 
     /**
      * Set the Server this KeyAuthorization is working for. Will be called on initialization
+     * @param server the server
      */
     public void setServer(Server server);
 
     /**
-     * Return the password to use to unlock the key, or null if the key is not unlocked
+     * Return the PrivateKey from the credential, or null if the key is not unlocked
      * @param principal the principal
+     * @param credential the credential
      * @param cid the credential id
-     * @param localPassword the "share_password" (if specified) or "local_password" otherwise set on the key, which may be null
-     * @param clientPassword the  OTP or PIN value supplied by the client, which should be be set except for "implicit" passwords
-     * @return the password to unlock the key, or null if the key is not unlocked
+     * @param json the contents of the <code>credentials/authorize</code> method
+     * @return the private key, or null if the key is not unlocked
      */
     public PrivateKey getPrivateKey(Principal principal, Credential credential, String cid, Json json);
 
     /**
      * Configure the KeyAuthorization. The default implementation does nothing
+     * @param config the confguration
      */
-    public void configure(Json json) throws Exception;
+    public void configure(Json config) throws Exception;
 
+    /**
+     * Initialize the HttpServer on startup.
+     * @param server the HttpServer to add methods or configure TLS authentication on
+     * @param prefix the base prefix for any methods being added - typically this is something like "/csc/v1".
+     * @param info a template for the info response, which can have values added to it - for example, adding "auth/login" to the "methods" list
+     */
     public void initialize(HttpServer htserver, String prefix, Json info);
 
     /**
-     * For "online" OTP passwords, this method is called to generate the OTP and notify the
-     * user of its value
+     * Populate the map in the credentials/info request with details for the supplied credential.
      * @param principal the principal
+     * @param credential the credential
      * @param cid the credential id
-     * @param localPassword the "share_password" (if specified) or "local_password" otherwise set on the key, which may be null
-     */
-    public default Json getChallenge(Principal principal, Credential credential, String cid, String method, Json json) {
-        throw new UnsupportedOperationException("Not implemented for \"" + method + "\"");
-    }
-
-    /**
-     * Return an optional map of additional properties to set on the credentials/info map for this credential.
-     * By default it is null, but properties that may be returned include "label", "description", "provider" and "ID",
-     * the last of which is required by the network API for OTP passwords.
-     * @param principal the principal
-     * @param cid the credential id
+     * @param json the key info map to populate
      */
     public void setKeyInfo(Principal principal, Credential credential, String cid, Json json);
 
+    /**
+     * Return true if this an an "OTP" key, false if it's a "PIN"
+     * @return true for OTP, false for PIN
+     */
     public boolean isOTP();
 
 }

@@ -329,7 +329,11 @@ public class OAuth2 implements Cloneable {
                 first = false;
                 sb.append(key);
                 sb.append('=');
-                sb.append(URLEncoder.encode(val, StandardCharsets.UTF_8));
+                try {
+                    sb.append(URLEncoder.encode(val, "UTF-8")); // charset method wasn't available in Java8
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
             }
         }
         return sb.toString();
@@ -570,7 +574,12 @@ public class OAuth2 implements Cloneable {
         if (get && data.length() > 0) {
             url = url + data;
         }
-        HttpURLConnection con = (HttpURLConnection)new URL(url).openConnection();
+        HttpURLConnection con;
+        try {
+            con = (HttpURLConnection)new URI(url).toURL().openConnection();
+        } catch (URISyntaxException e) {
+            throw new IOException(e);
+        }
         if (con instanceof HttpsURLConnection && getSSLContext() != null) {
             ((HttpsURLConnection)con).setSSLSocketFactory(getSSLContext().getSocketFactory());
         }
@@ -942,8 +951,8 @@ public class OAuth2 implements Cloneable {
                         synchronized(output) {
                             for (String s : t.getRequestURI().getQuery().split("&")) {
                                 int i = s.indexOf("=");
-                                String key = i >= 0 ? URLDecoder.decode(s.substring(0, i), StandardCharsets.UTF_8) : s;
-                                String value = i >= 0 && i + 1 < s.length() ? URLDecoder.decode(s.substring(i + 1), StandardCharsets.UTF_8) : null;
+                                String key = i >= 0 ? URLDecoder.decode(s.substring(0, i), "UTF-8") : s;        // charset method added in Java10
+                                String value = i >= 0 && i + 1 < s.length() ? URLDecoder.decode(s.substring(i + 1), "UTF-8") : null; // ditto
                                 output.put(key, value);
                             }
                             output.notifyAll();

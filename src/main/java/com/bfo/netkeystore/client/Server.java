@@ -26,6 +26,7 @@ public interface Server {
      * @param name the server name
      * @param config the configuration
      * @param auto if true, the server has been auto-configured from zeroconf
+     * @throws Exception if the server failed to configure
      */
     public void configure(String name, Json config, boolean auto) throws Exception;
 
@@ -34,11 +35,13 @@ public interface Server {
      * time a key is requested from its keystore
      * @param subject the subject, or null
      * @param prot the ProtectionParameter used to load the keystore
+     * @throws IOException for IOException
      */
     public void login(Subject subject, KeyStore.ProtectionParameter prot) throws IOException;
 
     /**
      * Log out of the server. Called from AuthProvider.logout
+     * @throws IOException for IOException
      */
     public void logout() throws IOException;
 
@@ -47,23 +50,31 @@ public interface Server {
      * Only currently used for Zeroconf-originating servers when they go offline
      * @param auto if true, shut the server down only if it was configured with auto=true
      * @return true if the server was shutdown, false if the request was ignored.
+     * @throws IOException for IOException
      */
     public boolean shutdown(boolean auto) throws IOException;
 
     /**
      * Return the SignatureAlgorithm corresponding to the specified name, or null if none exists
+     * @param name the signature name, eg "SHA256withRSA"
      */
     public SignatureAlgorithm getSignatureAlgorithm(String name);
 
     /**
      * Load the keystore from the Core with keys
+     * @throws IOException for IOException
      */
     public void load() throws IOException;
 
     /**
      * This calls "credentials/authorize" then "signature/hash"
-     * @param signAndHashAlgo the OID of the signature+hash (required)
-     * @param hashAlgo the OID of the hash (optional)
+     * @param key the signing key
+     * @param algorithm the signature algorithm
+     * @param params the signature algorithm params (normally null)
+     * @param data the digest to sign
+     * @return the signature bytes
+     * @throws IOException for IOException
+     * @throws UnrecoverableKeyException if the key can't be unlocked
      */
     public byte[] sign(NetPrivateKey key, SignatureAlgorithm algorithm, AlgorithmParameters params, byte[] data) throws UnrecoverableKeyException, IOException;
 

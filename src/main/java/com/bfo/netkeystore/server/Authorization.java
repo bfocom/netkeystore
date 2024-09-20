@@ -13,7 +13,7 @@ import com.bfo.zeroconf.*;
 import com.sun.net.httpserver.*;
 
 /**
- * The base class for any Authorizations
+ * The Authorization manages the authorization of users. There is one per Server
  */
 public abstract class Authorization {
 
@@ -59,22 +59,28 @@ public abstract class Authorization {
 
     /**
      * Set the Server this Authorization is working for
+     * @param server the server
      */
     public abstract void setServer(Server server);
 
     /**
      * Return the type of authorization that should be reported to the client: "external", "basic", "digest", "oauth2", "TLS", or "oauth2client"
+     * @return the type
      */
     public abstract String type();
 
     /**
      * Authorize the HTTP exchange. Return the Principal if authorized and normal processing should 
      * continue, or null if this method has intercepted the exchange and sent a 401 error due to authorization failure.
+     * @return the Principal
+     * @throw IOException for IOException
      */
     public abstract Principal authorize(HttpExchange exchange) throws IOException;
 
     /**
-     * Configure the Authorization. The default implementation loads a "keystore" map or "secret" string to sign tokens
+     * Configure the Authorization.
+     * @param config the server configuration
+     * @throw Exception if the configuration was invalid
      */
     public abstract void configure(Json config) throws Exception;
 

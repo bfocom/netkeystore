@@ -113,6 +113,8 @@
       <doctitle><![CDATA[${description} ${version}]]></doctitle>
       <header><![CDATA[${description} ${version}]]></header>
       <link href="https://docs.oracle.com/en/java/javase/11/docs/api/"/>
+      <link href="https://faceless2.github.io/json/docs/"/>
+      <link href="https://faceless2.github.io/zeroconf/docs/"/>
     </javadoc>
   </target>
 

@@ -87,7 +87,7 @@ public class NetProvider extends AuthProvider {
         } 
     }
 
-    @Override public Provider configure(String conf) {
+    public Provider configure(String conf) {
         // conf is the name of a file or the configuration itself. We exclude filenames with newlines and braces so there should be no ambiguity
         NetProvider dup = new NetProvider(conf);
         dup.callbackHandler = callbackHandler;

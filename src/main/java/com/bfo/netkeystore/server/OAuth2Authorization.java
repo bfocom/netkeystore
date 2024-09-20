@@ -252,7 +252,7 @@ public class OAuth2Authorization extends Authorization {
                         server.send(exchange, 413, server.createError("invalid_request", "Too much data received", null), null);
                         return;
                     }
-                    URL url = new URL(target);
+                    URL url = new URI(target).toURL();
                     con = (HttpURLConnection)url.openConnection();
                     con.setRequestMethod(exchange.getRequestMethod());
                     for (Map.Entry<String,List<String>> e : exchange.getRequestHeaders().entrySet()) {
@@ -346,7 +346,7 @@ public class OAuth2Authorization extends Authorization {
                 urlstring = urlstring.substring(0, ix).trim();
                 post = urlstring.substring(ix + 1).trim();
             }
-            URL url = new URL(urlstring);
+            URL url = new URI(urlstring).toURL();
             if (debug != null) {
                 debug.append("TX → ");
                 debug.append(urlstring);
@@ -395,6 +395,8 @@ public class OAuth2Authorization extends Authorization {
             } catch (IOException e) {
                 throw (IllegalArgumentException)new IllegalStateException("failed reading from authority server \"" + url + "\"").initCause(e);
             }
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException("invalid authority server \"" + urlstring + "\"");
         } catch (MalformedURLException e) {
             throw new IllegalStateException("invalid authority server \"" + urlstring + "\"");
         } finally {

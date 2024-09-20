@@ -128,7 +128,7 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
             throw new IOException(e);
         }
     }
-    @Override public final boolean engineProbe(InputStream in) throws IOException {
+    public final boolean engineProbe(InputStream in) throws IOException {       // Java9, don't add @Override
          return false;
     }
     @Override public final void engineSetCertificateEntry(String alias, Certificate cert) {
