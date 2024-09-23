@@ -62,6 +62,11 @@ are created:
 * `netkeystore-client-2.0.jar` contains the Provider for use as a Java KeyStore
 * `netkeystore-server-2.0.jar` contains a Main class which starts a web-server and acts as the server implementation.
 
+The current release can be downloaded from 
+[netkeystore-client-2.0.jar](https://bfocom.github.io/netkeystore/dist/netkeystore-client-2.0.jar) and
+[netkeystore-server-2.0.jar](https://bfocom.github.io/netkeystore/dist/netkeystore-client-2.0.jar), and here is the
+[javadoc](https://bfocom.github.io/netkeystore/docs).
+
 Several example configurations are shown in the `example` folder. To start a server
 
 ```shell
