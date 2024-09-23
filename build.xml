@@ -3,7 +3,7 @@
   <property name="build.sysclasspath" value="ignore"/>
   <property file="build.properties"/>
 
-  <property name="description" value="HSM Share"/>
+  <property name="description" value="NetKeyStore"/>
   <property name="dist" value="dist"/>		        <!-- where to build the Jars -->
   <property name="classes.main" value="build/main"/>	<!-- where to compile the classes -->
   <property name="docs" value="docs"/>
