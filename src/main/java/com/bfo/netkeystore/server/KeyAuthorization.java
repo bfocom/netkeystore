@@ -79,12 +79,13 @@ public interface KeyAuthorization {
     /**
      * Configure the KeyAuthorization. The default implementation does nothing
      * @param config the confguration
+     * @throws Exception if configuration failed
      */
     public void configure(Json config) throws Exception;
 
     /**
      * Initialize the HttpServer on startup.
-     * @param server the HttpServer to add methods or configure TLS authentication on
+     * @param htserver the HttpServer to add methods or configure TLS authentication on
      * @param prefix the base prefix for any methods being added - typically this is something like "/csc/v1".
      * @param info a template for the info response, which can have values added to it - for example, adding "auth/login" to the "methods" list
      */

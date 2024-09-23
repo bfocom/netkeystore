@@ -12,9 +12,19 @@ import java.lang.reflect.*;
 import com.bfo.json.Json;
 import com.bfo.json.YamlReader;
 
+/**
+ * An {@link AuthProvider} that wraps one or more {@link Server} objects
+ */
 public class NetProvider extends AuthProvider {
 
+    /**
+     * The name of this provider, which is "NetProvider"
+     */
     public static final String NAME = "NetProvider";
+
+    /**
+     * The name of the KeyStore type supported by this  provider, which is "NetKeyStore"
+     */
     public static final String KEYSTORE_TYPE = "NetKeyStore";
 
     private final Core core;
@@ -69,6 +79,10 @@ public class NetProvider extends AuthProvider {
         }
     }
 
+    /**
+     * Configure the NetProvider
+     * @param in the InputStream containing the configuration - unlike the requirements from its superclass, the configuration is formatted in Yaml
+     */
     @Override public void load(InputStream in) throws IOException {
         try {
             synchronized(this) {
@@ -87,6 +101,10 @@ public class NetProvider extends AuthProvider {
         } 
     }
 
+    /**
+     * Configure the NetProvider
+     * @param conf either the name of a file containing the Yaml configuraition, or the Yaml configuration itself as text.
+     */
     public Provider configure(String conf) {
         // conf is the name of a file or the configuration itself. We exclude filenames with newlines and braces so there should be no ambiguity
         NetProvider dup = new NetProvider(conf);

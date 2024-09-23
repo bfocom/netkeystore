@@ -12,6 +12,9 @@ import java.io.*;
 import com.bfo.json.*;
 import com.bfo.zeroconf.*;
 
+/**
+ * The underpinning of the NetProvider
+ */
 class Core {
 
     private static final int ZEROCONFDELAY = 1000;      // How long to wait after Zeroconf starts before returning keys

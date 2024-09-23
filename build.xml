@@ -106,7 +106,7 @@
     <condition property="javadoc.additionalparam" value="-notimestamp"><matches pattern="^1.8" string="${java.version}"/></condition>
     <property name="javadoc.additionalparam" value="-notimestamp --ignore-source-errors"/>
 
-    <javadoc destdir="${docs}" access="public" author="false" version="false" windowtitle="${description} ${version}" charset="UTF-8" encoding="UTF-8" docencoding="UTF-8" additionalparam="${javadoc.additionalparam}" use="true" breakiterator="true">
+    <javadoc destdir="${docs}" access="protected" author="false" version="false" windowtitle="${description} ${version}" charset="UTF-8" encoding="UTF-8" docencoding="UTF-8" additionalparam="${javadoc.additionalparam}" use="true" breakiterator="true">
       <sourcefiles>
         <fileset dir="${src.main}"/>
       </sourcefiles>

@@ -25,6 +25,9 @@ public class BasicAuthorization extends Authorization {
     private Json config;
     private int expiry = DEFAULT_EXPIRY;
 
+    /**
+     * Returns "basic"
+     */
     @Override public String type() {
         return "basic";
     }
@@ -93,6 +96,10 @@ public class BasicAuthorization extends Authorization {
         return null;
     }
 
+    /**
+     * Log out the specified user
+     * @param principal the principal
+     */
     protected void logout(JWT principal) {
         synchronized(active) {
             active.remove(principal.getUniqueID());
@@ -102,7 +109,10 @@ public class BasicAuthorization extends Authorization {
     /**
      * Verify the user/password. If verified, return the list of credentials they can access, or null if they can access all of them.
      * A custom implementation could overrride this method to use an external source for this data
-     * @throw a RuntimeException if the login is invalid
+     * @param userid the user
+     * @param password the password
+     * @return the JWT representing the user, or null if the login details are invalid
+     * @throws RuntimeException if the login is invalid
      */
     protected JWT login(String userid, String password) {
         boolean valid = false;

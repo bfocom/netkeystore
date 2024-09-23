@@ -38,8 +38,14 @@ import java.awt.SystemTray;
 import java.awt.TrayIcon;
 import javax.imageio.ImageIO;
 
+/**
+ * The Server is the core class for the NetKeyStore Server package, representing a standalone webserver that presents as a Cloud Signture Consortium RSSP
+ */
 public class Server {
 
+    /**
+     * The ZeroConf service used by this Server, which is "_netkeystore._tcp"
+     */
     public static final String SERVICE = "_netkeystore._tcp";
 
     private static final int MAXRXBUF = 8192;   // we are never going to receive a POST with more data than this that's valid
@@ -62,13 +68,16 @@ public class Server {
     private Zeroconf zeroconf;
     private Service zeroconfService;
 
+    /**
+     * Create a new Server
+     */
     public Server() {
         this.sads = new HashMap<String,SAD>();
         this.random = new SecureRandom();
         dateFormatter = DateTimeFormatter.ofPattern("uuuuMMddHHmmss'Z'");
     }
 
-    protected void debug(String s) {
+    void debug(String s) {
         if (debug) {
             System.out.println("DEBUG: " + s);
         }
@@ -76,28 +85,31 @@ public class Server {
 
     /**
      * Return the Authorization in use by this server, which will never be null
+     * @return the Authorization
      */
     public Authorization getAuthorization() {
         return auth;
     }
 
     /**
-     * Return the KeyAuthorization in use by this server, which may be null
+     * Return the KeyAuthorization in use by this server, which never be null
+     * @return the KeyAuthorization
      */
     public KeyAuthorization getKeyAuthorization() {
         return keyauth;
     }
 
     /**
-     * Return the KeyAuthorization in use by this server, which may be null
+     * Return the CredentialCollection in use by this server, which will never be null
+     * @return the CredentialCollection
      */
     public CredentialCollection getCredentials() {
         return credentials;
     }
 
     /**
-    /**
-     * Return the Random used by the Server
+     * Return the Random used by the Server, which will never be null
+     * @return random
      */
     public Random getRandom() {
         return random;
@@ -105,27 +117,32 @@ public class Server {
 
     /**
      * Return some secret bytes that apply only to this Server
+     * @return some secret bytes.
      */
     public byte[] getSecret() {
-        return secret;
+        return (byte[])secret.clone();
     }
 
     /**
      * Return the name of the server, as set in the configuration
+     * @return the name
      */
     public String getName() {
         return config.stringValue("name");
     }
 
     /**
-     * Return the URL the Webserver thinks it's listening on when running
+     * Return the URL the Webserver thinks it's listening on when running.
+     * This is only guaranteeed to be set after the server has started
+     * @return the URL
      */
     public String getURL() {
         return url;
     }
 
     /**
-     * Return the port the Webserver is listening on, or 0 if not started
+     * Return the port the Webserver is listening on, or 0 if not started.
+     * @return the port
      */
     public int getPort() {
         return usedport;

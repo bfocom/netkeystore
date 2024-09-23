@@ -8,7 +8,7 @@ import com.bfo.json.*;
 /**
  * A Credential is effectively a wrapper around a PrivateKey
  */
-interface Credential {
+public interface Credential {
 
     /**
      * Return the name this Credential is known by for the specified Principal,
@@ -29,7 +29,7 @@ interface Credential {
 
     /**
      * Return the Private Key. Only called after the Credential has been verified by the
-     * {@link #match} method, the specified password may be used, ignored or altered depending on the
+     * {@link #matches matches()} method, the specified password may be used, ignored or altered depending on the
      * values of local_password and share_password when the Credential was created.
      * @param password the password supplied by the client
      * @return the key or null if access is denied
@@ -37,30 +37,35 @@ interface Credential {
     public PrivateKey getPrivateKey(String password);
 
     /**
-     * Return the certificates for this Credential
+     * Return a read-only certificates for this Credential
+     * @return the list of certificates
      */
     public List<X509Certificate> getCertificates();
 
     /**
      * Return the info map for this key that should be returned in credentials/info
+     * @return the info
      */
     public Json getInfo();
 
     /**
      * Return the KeyStore this Credential comes from.
-     * Not required by the API, it may be useful to a custom {@link KeyAuthorizaton}
+     * Not required by the API, it may be useful to a custom {@link KeyAuthorization}
+     * @return the KeyStore
      */
     public KeyStore getKeyStore();
 
     /**
      * Return the name of the KeyStore this Credential comes from.
-     * Not required by the API, it may be useful to a custom {@link KeyAuthorizaton}
+     * Not required by the API, it may be useful to a custom {@link KeyAuthorization}
+     * @return the KeyStore name
      */
     public String getKeyStoreName();
 
     /**
      * Return the name of the KeyStore this Credential comes from.
-     * Not required by the API, it may be useful to a custom {@link KeyAuthorizaton}
+     * Not required by the API, it may be useful to a custom {@link KeyAuthorization}
+     * @return the KeyStore alias
      */
     public String getKeyStoreAlias();
 

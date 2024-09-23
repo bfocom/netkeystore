@@ -7,6 +7,9 @@ import java.security.spec.*;
 import java.util.concurrent.*;
 import com.bfo.json.*;
 
+/**
+ * A {@link SignatureSpi} that defers the signing process to the {@link Server} object
+ */
 public class NetSignatureSpi extends SignatureSpi {
 
     private final NetProvider provider;
@@ -40,10 +43,10 @@ public class NetSignatureSpi extends SignatureSpi {
     //------------------------------------------------------------------------
 
     /**
-     * @SuppressWarnings({"deprecation", "dep-ann"})
      * @deprecated
-     * @Deprecated
      */
+    @SuppressWarnings({"deprecation", "dep-ann"})
+    @Deprecated
     protected Object engineGetParameter(String param) {
         throw new InvalidParameterException();
     }
@@ -76,10 +79,10 @@ public class NetSignatureSpi extends SignatureSpi {
     }
 
     /**
-     * @SuppressWarnings({"deprecation", "dep-ann"})
-     * @Deprecated
      * @deprecated
      */
+    @SuppressWarnings({"deprecation", "dep-ann"})
+    @Deprecated
     protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
         throw new InvalidParameterException();
     }

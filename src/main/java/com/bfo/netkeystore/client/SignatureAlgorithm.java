@@ -5,7 +5,10 @@ import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.*;
 
-class SignatureAlgorithm {
+/**
+ * A helper class representing SignatureAlgorithm, with OID, zero or more friendly names and some other helper methods.
+ */
+public class SignatureAlgorithm {
 
     private static final Map<String,SignatureAlgorithm> REGISTRY = new HashMap<String,SignatureAlgorithm>();
 
@@ -19,33 +22,59 @@ class SignatureAlgorithm {
         this.names = Collections.<String>unmodifiableList(Arrays.asList(names));
     }
 
+    /**
+     * Return true if this SignatureAlgorithm matches the specified name
+     * @param name the name
+     * @return true if it matches
+     */
     public boolean isName(String name) {
         return (oid != null && oid.equals(name)) || names.contains(name);
     }
 
     /**
      * Return the preferred name - the first one, or the OID if no names are specified
+     * @return the name
      */
     public String name() {
         return names.isEmpty() ? oid : names.get(0);
     }
 
+    /**
+     * Return the list of all names that match this algorithm
+     * @return the list of names
+     */
     public List<String> names() {
         return names;
     }
 
+    /**
+     * Return the OID for this algorithm
+     * @return the OID
+     */
     public String oid() {
         return oid;
     }
 
+    /**
+     * Return the keyAlgorithm for this algorithm
+     * @return the algorithm name
+     */
     public String keyAlgorithm() {
         return keyAlgorithm;
     }
 
+    /**
+     * Return the digestAlgorithm for this algorithm
+     * @return the algorithm name
+     */
     public String digestAlgorithm() {
         return digestAlgorithm;
     }
 
+    /**
+     * Return the name of the Java algorithm to use when creating this Signature if an external digest is used
+     * @return the algorithm name
+     */
     public String signingAlgorithmWithExternalDigest() {
         String ka = keyAlgorithm();
         if ("EC".equals(ka)) {
@@ -54,20 +83,39 @@ class SignatureAlgorithm {
         return "NONEwith" + ka;
     }
 
+    /**
+     * Return the Class to use for this algorithm's {@link AlgorithmParameterSpec}, or null if it has no parameters
+     * @return the class, or null
+     */
     public Class<? extends AlgorithmParameterSpec> signingAlgorithmParameterClass() {
         return null;
     }
 
+    /**
+     * Apply the digest to the signature, which may be as simple as calling sig.update(digest);
+     * @param digest the digest
+     * @param sig the signature
+     * @throws SignatureException if one occurs
+     */
     public void sign(byte[] digest, Signature sig) throws SignatureException {
         sig.update(digest);
     }
 
+    /**
+     * Return a list of all defined algorithms
+     * @return the collection of SignatureAlgorithms
+     */
     public static Collection<SignatureAlgorithm> all() {
         return Collections.<SignatureAlgorithm>unmodifiableCollection(REGISTRY.values());
     }
 
-    public static SignatureAlgorithm get(String s) {
-        return REGISTRY.get(s);
+    /**
+     * Return the SignatureAlgorithm matching the specified name
+     * @param name the name
+     * @return the algorithm
+     */
+    public static SignatureAlgorithm get(String name) {
+        return REGISTRY.get(name);
     }
 
     public String toString() {

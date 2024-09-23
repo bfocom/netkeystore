@@ -17,7 +17,8 @@ import javax.security.auth.callback.*;
 import com.bfo.json.*;
 
 /**
- * A generic Server
+ * A Server represents a network-based signature provider. The configuration for a {@link NetProvider} will
+ * generally define one or more Servers, and more may be found via Zeroconf
  */
 public interface Server {
 
@@ -25,13 +26,13 @@ public interface Server {
      * Configure the server
      * @param name the server name
      * @param config the configuration
-     * @param auto if true, the server has been auto-configured from zeroconf
+     * @param auto if true, the server has been auto-configured from Zeroconf
      * @throws Exception if the server failed to configure
      */
     public void configure(String name, Json config, boolean auto) throws Exception;
 
     /**
-     * Login to the server. Called from AuthProvider.login, or the first
+     * Login to the server. Called from {@link AuthProvider#login}, or the first
      * time a key is requested from its keystore
      * @param subject the subject, or null
      * @param prot the ProtectionParameter used to load the keystore
@@ -40,7 +41,7 @@ public interface Server {
     public void login(Subject subject, KeyStore.ProtectionParameter prot) throws IOException;
 
     /**
-     * Log out of the server. Called from AuthProvider.logout
+     * Log out of the server. Called from {@link AuthProvider#logout}
      * @throws IOException for IOException
      */
     public void logout() throws IOException;
@@ -57,6 +58,7 @@ public interface Server {
     /**
      * Return the SignatureAlgorithm corresponding to the specified name, or null if none exists
      * @param name the signature name, eg "SHA256withRSA"
+     * @return the SignatureAlgorithm
      */
     public SignatureAlgorithm getSignatureAlgorithm(String name);
 

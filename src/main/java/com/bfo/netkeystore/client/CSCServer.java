@@ -16,6 +16,9 @@ import javax.security.auth.x500.*;
 import javax.security.auth.callback.*;
 import com.bfo.json.*;
 
+/**
+ * An implementatation of Server that supported the CSC API v1
+ */
 class CSCServer implements Server {
 
     private static final int TIMEOUT = 15;      // seconds

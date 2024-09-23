@@ -12,9 +12,9 @@ import com.sun.net.httpserver.*;
 
 /**
  * An OAuth2 Authorization that proxies the authorization to another server,
- * then verifies the returned token has the appropriate scope.
- *
- * This is not a full solution! It's a demonstrator
+ * then verifies the returned token has the appropriate scope. It should be
+ * obvious that this Authorization entirely defers security of the server
+ * to the OAuth2 server.
  */
 public class OAuth2Authorization extends Authorization {
 
@@ -34,6 +34,9 @@ public class OAuth2Authorization extends Authorization {
     private long refreshInterval, defaultExpiry;
     private Map<String,PrincipalProxy> tokens = new HashMap<String,PrincipalProxy>();
 
+    /**
+     * Returns "oauth2code"
+     */
     @Override public String type() {
         return "oauth2code";
     }
@@ -328,6 +331,8 @@ public class OAuth2Authorization extends Authorization {
      * The default implementation calls the URL specified by "verify_url" in the
      * configuration file.
      * </p>
+     * @param accessToken the access_token
+     * @return the details that access_token represents, or null if it cannot be verified
      * @throws IllegalStateException with a message describing the failure
      */
     protected Json verifyAccessToken(String accessToken) {
@@ -413,7 +418,9 @@ public class OAuth2Authorization extends Authorization {
      * the token is actually appropriate for this service - for example, it should
      * check the "scope", etc.
      * If it's valid, return a new JWT
+     * @param accessToken the Access Token
      * @param json the payload of the access token
+     * @return a new JWT representing the user, or null if the user details are invalid
      */
     protected Principal createPrincipal(String accessToken, Json json) {
         Principal principal = null;

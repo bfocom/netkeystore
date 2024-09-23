@@ -100,6 +100,7 @@ public class SampleOnlineOTP implements KeyAuthorization {
      * Generate and store an OTP
      * @param principal the principal
      * @param credential the credential
+     * @param cid the credential id
      * @return the OTP
      */
     protected String generateOTP(Principal principal, Credential credential, String cid) {
@@ -128,6 +129,7 @@ public class SampleOnlineOTP implements KeyAuthorization {
      * Notify the user that a new OTP has been generated, by printing a message to the console.
      * @param principal the principal
      * @param credential the credential
+     * @param cid the credential id
      * @param otp the OTP
      */
     protected void notifyOTP(Principal principal, Credential credential, String cid, String otp) {

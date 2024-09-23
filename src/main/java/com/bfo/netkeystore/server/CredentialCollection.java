@@ -10,7 +10,10 @@ import javax.crypto.*;
 import java.nio.charset.*;
 import com.bfo.json.*;
 
-class CredentialCollection {
+/**
+ * Return the collection of Credentials available to the {@link Server}
+ */
+public class CredentialCollection {
 
     private Server server;
     private Json config;
@@ -23,10 +26,11 @@ class CredentialCollection {
 
     /**
      * Return a list of all credential IDs associated with this principal
-     * @param principal the principal which may be ANONYMOUS, JWT, an X509Principal or something else
-     * @param userid if the principal is anonymous, the userid specified by the client
+     * @param principal the principal as returned from {@link Authorization#authorize}
+     * @param userid if the principal is {@link Authorization#ANONYMOUS}, the userid specified by the client
+     * @return the list of credentials, which may be empty
      */
-    List<String> getCredentials(Principal principal, String userid) {
+    public List<String> getCredentials(Principal principal, String userid) {
         List<String> names = new ArrayList<String>();
         for (Credential credential : credentials) {
             String name = credential.getName(principal, userid);
@@ -39,11 +43,11 @@ class CredentialCollection {
 
     /**
      * Return the Credential corresponding to the Principal and the cid.
-     * If the principal was specified by a userid when getCredentials was called, will simply be ANONYMOUS now
-     * @param principal the principal which may be ANONYMOUS, a JWT, an X509Principal or something else.
+     * @param principal the principal as returned from {@link Authorization#authorize}
      * @param cid the credential id
+     * @return the credentials, or null if there is no match
      */
-    Credential getCredential(Principal principal, String cid) {
+    public Credential getCredential(Principal principal, String cid) {
         for (Credential credential : credentials) {
             if (credential.matches(principal, cid)) {
                 return credential;

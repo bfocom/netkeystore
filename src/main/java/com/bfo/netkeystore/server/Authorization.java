@@ -13,7 +13,7 @@ import com.bfo.zeroconf.*;
 import com.sun.net.httpserver.*;
 
 /**
- * The Authorization manages the authorization of users. There is one per Server
+ * The Authorization manages the authorization of users. There is one per Server.
  */
 public abstract class Authorization {
 
@@ -72,15 +72,16 @@ public abstract class Authorization {
     /**
      * Authorize the HTTP exchange. Return the Principal if authorized and normal processing should 
      * continue, or null if this method has intercepted the exchange and sent a 401 error due to authorization failure.
-     * @return the Principal
-     * @throw IOException for IOException
+     * @param exchange the HttpExchange
+     * @return the Principal, which may be {@link #ANONYMOUS}, a {@link JWT}, a {@link javax.security.auth.x500.X500Principal} or something else
+     * @throws IOException for IOException
      */
     public abstract Principal authorize(HttpExchange exchange) throws IOException;
 
     /**
      * Configure the Authorization.
      * @param config the server configuration
-     * @throw Exception if the configuration was invalid
+     * @throws Exception if the configuration was invalid
      */
     public abstract void configure(Json config) throws Exception;
 

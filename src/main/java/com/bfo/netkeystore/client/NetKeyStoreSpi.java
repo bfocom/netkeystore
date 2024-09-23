@@ -6,6 +6,9 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.io.*;
 
+/**
+ * A {@link KeyStoreSpi} that simply wraps the keys supplied by one or more {@link Server} object
+ */
 public class NetKeyStoreSpi extends KeyStoreSpi {
 
     private final Core core;

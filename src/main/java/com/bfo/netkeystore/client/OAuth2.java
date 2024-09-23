@@ -48,7 +48,7 @@ import javax.security.auth.callback.*;
  * <li><b>protocol.grant.device_code.<i>nnn</i></b> - any extra strings to be included in any <code>grant_type=urn:ietf:params:oauth:grant-type:device_code</code> requests to the "token_endpoint" (key is <i>nnn</i>)</li>
  * </ul>
  *
- * <h3>Example use</h3>
+ * <h2>Example use</h2>
  * <pre>
  * OAuth2 oauth = new OAuth2() {
  *   public boolean setAuthorization(Map&gt;String,?&gt; p) {
@@ -112,6 +112,7 @@ public class OAuth2 implements Cloneable {
     /**
      * Set the {@link RedirectURLHandler} which will be used for "authorization" flow.
      * Required only if that flow is used and a new authorization has to be made
+     * @param handler the handler
      */
     public void setRedirectURLHandler(RedirectURLHandler handler) {
         this.redirectHandler = handler;
@@ -130,34 +131,39 @@ public class OAuth2 implements Cloneable {
 
     /**
      * Set the SSLContext which will be used for all network traffic
+     * @param ssl the SSLContext
      */
     public void setSSLContext(SSLContext ssl) {
         this.ssl = ssl;
     }
 
     /**
-     * Return the RedirectURLHandler
+     * Return the RedirectURLHandler set by {@link #setRedirectURLHandler}
+     * @return the handler
      */
     public RedirectURLHandler getRedirectURLHandler() {
         return redirectHandler;
     }
 
     /**
-     * Return the CallbackHandler
+     * Return the CallbackHandler set by {@link #setCallbackHandler}
+     * @return the handler
      */
     public CallbackHandler getCallbackHandler() {
         return callbackHandler;
     }
 
     /**
-     * Return the SSLContext
+     * Return the SSLContext set by {@link #setSSLContext}
+     * @return the SSLContext
      */
     public SSLContext getSSLContext() {
         return ssl;
     }
 
     /**
-     * Return the Random
+     * Return the Random set by {@link #setRandom}
+     * @return random
      */
     public Random getRandom() {
         if (random == null) {
@@ -172,7 +178,7 @@ public class OAuth2 implements Cloneable {
 
     /**
      * Set the Random used by this object (must not be null)
-     * @param random the random to use
+     * @param random the random to use, m
      */
     public void setRandom(Random random) {
         if (random == null) {
@@ -264,6 +270,7 @@ public class OAuth2 implements Cloneable {
     /**
      * Update the OAuth2 with new authorization properties.
      * An overridden instance of this class could save the authorizations if <code>super.setAuthorizations()</code> returned true
+     * @param auth the authorizastion properties
      * @return false if this was the first time the authorization properties were called, true if they've been updated
      */
     public synchronized boolean setAuthorization(Map<String,?> auth) {
@@ -287,7 +294,7 @@ public class OAuth2 implements Cloneable {
 
     /**
      * Notify the user that they have to open a URL. The default implementation
-     * calls the callback handle with a {@link TextOutputHandler} if specified,
+     * calls the callback handle with a {@link TextOutputCallback} if specified,
      * or prints to System.out if not
      * @param url the URL to open
      * @param code an option code that has to be entered when the URL is loaded (for device authorization)
@@ -350,6 +357,8 @@ public class OAuth2 implements Cloneable {
 
     /**
      * Return the "access_token" from the {@link #getAuthorization} method.
+     * @return the Access Token or null
+     * @throws IOException if an IOException occurs
      */
     public String getAccessToken() throws IOException {
         Map<String,Object> map = getAuthorization();
@@ -361,6 +370,8 @@ public class OAuth2 implements Cloneable {
      * The returned Json should have "access_token" and other properties returned from the server. 
      * If the authorization was changed from last time this method was called {@link #setAuthorization} will be
      * called with the updated values (so an overridden instance of this class can save them).
+     * @return the Map of authorization properties, which will never be null
+     * @throws IOException if an IOException occurs
      */
     public synchronized Map<String,Object> getAuthorization() throws IOException {
         if (props.isEmpty()) {
@@ -829,8 +840,12 @@ public class OAuth2 implements Cloneable {
     public static interface RedirectURLHandler {
         /**
          * Initialize a callback, which will require the user to open a web-browser to continue OAuth2 authorization
+         * @param oauth2 the OAuth2 object
+         * @param url the URL to connect to for the initial authorization
+         * @throws IOException if an IOException occurs
+         * @return a Map containing the properties received at the "redirect_uri"
          */
-        public Map<String,Object> handleRedirect(OAuth2 auth, String url) throws IOException;
+        public Map<String,Object> handleRedirect(OAuth2 oauth2, String url) throws IOException;
     }
 
     /**
