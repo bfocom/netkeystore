@@ -22,9 +22,9 @@ import com.bfo.json.*;
 class CSCServer implements Server {
 
     private static final int TIMEOUT = 15;      // seconds
-    private final Core core;
+    private Core core;
     private boolean auto;
-    private Collection<SignatureAlgorithm> acceptedAlgorithms;
+    private Collection<SignatureAlgorithm> acceptedAlgorithms = new HashSet<SignatureAlgorithm>();
     private String name;
     private Json config, info;
     private int version;
@@ -33,12 +33,11 @@ class CSCServer implements Server {
     private Authentication auth;
     private HostnameVerifier hostnameVerifier;
 
-    CSCServer(Core core) {
+    @Override public void configure(Core core, String name, Json config, boolean auto) throws Exception {
+        if (this.core != null) {
+            throw new IllegalStateException("Already configured");
+        }
         this.core = core;
-        acceptedAlgorithms = new HashSet<SignatureAlgorithm>();
-    }
-
-    @Override public void configure(String name, Json config, boolean auto) throws Exception {
         this.auto = auto;
         this.name = name;
         this.config = config;
@@ -361,8 +360,8 @@ class CSCServer implements Server {
 
     @Override public void login(Subject subject, KeyStore.ProtectionParameter prot) throws IOException {
         Json json = Json.read("{}");
-        if (core.getLang() != null) {
-            json.put("lang", core.getLang());
+        if (core.getLanguage() != null) {
+            json.put("lang", core.getLanguage());
         }
         Reply reply = send("POST", baseurl() + "info", json, null);
         if (reply.code == 200) {
@@ -424,8 +423,8 @@ class CSCServer implements Server {
                 json.put("certificates", "chain");
                 json.put("certInfo", true);
                 json.put("authInfo", true);
-                if (core.getLang() != null) {
-                    json.put("lang", core.getLang());
+                if (core.getLanguage() != null) {
+                    json.put("lang", core.getLanguage());
                 }
                 reply = send("POST", baseurl() + "credentials/info", json, auth);
                 json = reply.json;
@@ -452,9 +451,9 @@ class CSCServer implements Server {
                                 json.remove("cert");
                             }
                             PrivateKey key = new NetPrivateKey(this, kid, keyAlg, json);
-                            core.addKey(this.name + "/" + kid, new KeyStore.PrivateKeyEntry(key, certs));
+                            core.addKey(this, kid, new KeyStore.PrivateKeyEntry(key, certs));
                         } else {
-                            core.warning("Ignoring key \"" + kid + "\": unrecognised algorithms " + json.get("key").get("algo"));
+                            core.warning("Ignoring key \"" + kid + "\": unrecognised algorithms " + json.get("key").get("algo"), null);
                         }
                     } else {
 //                        core.warning("Ignoring disabled key \"" + kid + "\"");
@@ -493,8 +492,8 @@ class CSCServer implements Server {
         final Json keyjson = key.getJson();
         final Json json = Json.read("{}");
 
-        if (core.getLang() != null) {
-            json.put("lang", core.getLang());
+        if (core.getLanguage() != null) {
+            json.put("lang", core.getLanguage());
         }
 
         if ("implicit".equals(keyjson.stringValue("authMode"))) {

@@ -13,7 +13,8 @@ import com.bfo.json.*;
 import com.bfo.zeroconf.*;
 
 /**
- * The underpinning of the NetProvider
+ * The underpinning of the NetProvider.
+ * Not public, but if you're implementing a new Server you'll ned to know about it.
  */
 class Core {
 
@@ -48,6 +49,92 @@ class Core {
         }
     }
 
+    /**
+     * Add a new Key
+     * @param server the server adding the key
+     * @param name the name of the key
+     * @param Keystore.Entry the KeyStore.Entry
+     */
+    public void addKey(Server server, String name, KeyStore.PrivateKeyEntry entry) {
+        if (!(entry.getPrivateKey() instanceof NetPrivateKey)) {
+            throw new IllegalArgumentException("The Key must be a NetPrivateKey");
+        }
+        String serverName = null;
+        for (Map.Entry<String,Server> e : servers.entrySet()) {
+            if (e.getValue() == server) {
+                serverName = e.getKey();
+                break;
+            }
+        }
+        if (serverName == null) {
+            throw new IllegalArgumentException("Unrecognised server");
+        }
+        name = serverName + "/" + name;
+        entries.put(name, entry);
+        for (Map.Entry<String,String> e : aliases.entrySet()) {
+            if (e.getValue().equals(name)) {
+                entries.put(e.getKey(), entry);
+            }
+        }
+    }
+
+    /**
+     * Return the language defined in the configuration, or null
+     */
+    public String getLanguage() {
+        return lang;
+    }
+
+    /**
+     * Return the "base" file defined in the configuration, or null
+     */
+    public File getBase() {
+        return base;
+    }
+
+    /**
+     * Return the debug flag
+     */
+    public boolean isDebug() {
+        return debug;
+    }
+
+    /**
+     * Issue a debug message
+     * @param msg the message
+     */
+    public void debug(String msg) {
+        if (isDebug()) {
+            System.out.println("DEBUG: " + msg);
+        }
+    }
+
+    /**
+     * Log a warning
+     * @param msg the message
+     * @param throwable an optional throwable
+     */
+    public void warning(String msg, Throwable throwable) {
+        try {
+            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);   // If compiling under Java8, remove this line
+            return;                                                                                 // If compiling under Java8, remove this line
+        } catch (Throwable e) {}
+        try {
+            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
+        } catch (Throwable e2) {
+            System.out.println("WARNING: " + msg);
+        }
+    }
+
+    //-------------------------------------------------------------------------------------------
+    // Methods below here aren't important if you're just adding a new Server instance
+    //-------------------------------------------------------------------------------------------
+
+    /**
+     * Add a new supported SignatureAlgorithm. Call this method as often
+     * as needed to add all algorithms supported by keys, so the Provider
+     * knows which algorithms to accept
+     */
     void configure(Json config) throws Exception {
         if (config == null) {
             config = Json.read("{}");
@@ -147,12 +234,13 @@ class Core {
         Server server = null;
         if (type == null) {
             throw new IllegalArgumentException("Server \"" + name + "\" missing required \"type\" property");
-        } else if ("csc".equals(type)) {
-            server = new CSCServer(this);
         } else {
-            throw new IllegalArgumentException("Server \"" + name + "\" invalid type \"" + type + "\"");
+            server = Server.getServer(type);
+            if (server == null) {
+                throw new IllegalArgumentException("Server \"" + name + "\" invalid type \"" + type + "\"");
+            }
         }
-        server.configure(name, json, auto);
+        server.configure(this, name, json, auto);
         servers.put(name, server);
     }
 
@@ -190,36 +278,6 @@ class Core {
         }
     }
 
-    String getLang() {
-        return lang;
-    }
-
-    File getBase() {
-        return base;
-    }
-
-    boolean isDebug() {
-        return debug;
-    }
-
-    void debug(String msg) {
-        if (isDebug()) {
-            System.out.println("DEBUG: " + msg);
-        }
-    }
-
-    void warning(String msg) {
-        try {
-            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);   // If compiling under Java8, remove this line
-            return;                                                                                 // If compiling under Java8, remove this line
-        } catch (Throwable e) {}
-        try {
-            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
-        } catch (Throwable e2) {
-            System.out.println("WARNING: " + msg);
-        }
-    }
-
     boolean isConnected() {
         return connected;
     }
@@ -253,16 +311,7 @@ class Core {
         }
     }
 
-    void addKey(String name, KeyStore.Entry entry) {
-        entries.put(name, entry);
-        for (Map.Entry<String,String> e : aliases.entrySet()) {
-            if (e.getValue().equals(name)) {
-                entries.put(e.getKey(), entry);
-            }
-        }
-    }
-
-    void addSignatureAlgorithm(SignatureAlgorithm algorithm) {
+    public void addSignatureAlgorithm(SignatureAlgorithm algorithm) {
         provider.addSignatureAlgorithm(algorithm);
     }
 
@@ -355,12 +404,26 @@ class Core {
         }
     }
 
-    Json getAuthorization(String name) {
+    /**
+     * Return any "authorization" data previously set by {@link #setAuthorization},
+     * or null if none exists.
+     * @param name the name
+     */
+    public Json getAuthorization(String name) {
         return authorizations.get(name);
     }
 
-    void setAuthorization(String name, Json json) {
-        authorizations.put(name, json);
+    /**
+     * Set the "authorization" data for the specified server name, or null to delete it.
+     * @param name the name
+     * @param json the authorization data
+     */
+    public void setAuthorization(String name, Json json) {
+        if (json == null) {
+            authorizations.remove(name);
+        } else {
+            authorizations.put(name, json);
+        }
         try {
             saveAuthorization();
         } catch (Exception e) {
@@ -378,7 +441,15 @@ class Core {
 
     //----------------------------------------------------------------------------------------
 
-    KeyStore loadKeyStore(String path, String password) throws Exception {
+    /**
+     * A support method to load a KeyStore from the supplied path,
+     * because Java 8 doesn't have Keytore.getInstance(file, password)
+     * @param path the file path
+     * @param password the password
+     * @return the keystore
+     * @throws IOException if the KeyStore fails to load
+     */
+    public KeyStore loadKeyStore(String path, String password) throws Exception {
         File file = new File(base, path);
         if (file.canRead()) {
             try {
@@ -422,6 +493,7 @@ class Core {
     }
 
 
+    // convenience methods
     X509Certificate decodeCertificate(String s) {
         try {
             s = s.replace("-","+").replace("_","/");      // just in case, convert from url-format
