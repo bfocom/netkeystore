@@ -366,7 +366,9 @@ class Core {
         }
         if (authorizations == null) {
             if (authPassword != null) {
-                if (authFilename == null || authFilename.endsWith(".jks")) {
+                if (authFilename == null) {
+                    authKeystore = KeyStore.getInstance(KeyStore.getDefaultType());
+                } else if (authFilename.endsWith(".jks")) {
                     authKeystore = KeyStore.getInstance("JKS");
                 } else if (authFilename.endsWith(".jceks")) {
                     authKeystore = KeyStore.getInstance("JCEKS");
@@ -507,6 +509,5 @@ class Core {
     String encodeCertificate(X509Certificate cert) throws Exception {
         return Base64.getEncoder().encodeToString(cert.getEncoded());
     }
-
 
 }
