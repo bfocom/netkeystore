@@ -26,6 +26,7 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
     //-----------------------------------------
 
     @Override public KeyStore.Entry engineGetEntry(String alias, KeyStore.ProtectionParameter protParam) {
+        if (core.isDebug("trace")) core.debug("trace", "KeyStore.engineGetEntry(\"" + alias + "\", " + protParam + ")");
         KeyStore.Entry e = getEntries().get(alias);
         if (e instanceof KeyStore.PrivateKeyEntry && protParam != null) {
             NetPrivateKey key = (NetPrivateKey)((KeyStore.PrivateKeyEntry)e).getPrivateKey();
@@ -36,10 +37,12 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
     }
 
     @Override public int engineSize() {
+        if (core.isDebug("trace")) core.debug("trace", "KeyStore.engineSize()");
         return getEntries().size();
     }
 
     @Override public Enumeration<String> engineAliases() {
+        if (core.isDebug("trace")) core.debug("trace", "KeyStore.engineAliases()");
         final Iterator<String> i = getEntries().keySet().iterator();
         return new Enumeration<String>() {
             public boolean hasMoreElements() {
@@ -122,6 +125,7 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
         });
     }
     @Override public final void engineLoad(KeyStore.LoadStoreParameter prot) throws IOException {
+        if (core.isDebug("trace")) core.debug("trace", "KeyStore.engineLoad(" + prot + ")");
         try {
             if (!core.isConnected()) {
                 core.login(null, prot == null ? null : prot.getProtectionParameter());
@@ -132,7 +136,8 @@ public class NetKeyStoreSpi extends KeyStoreSpi {
         }
     }
     public final boolean engineProbe(InputStream in) throws IOException {       // Java9, don't add @Override
-         return false;
+        if (core.isDebug("trace")) core.debug("trace", "KeyStore.engineProbe(" + in + ")");
+        return false;
     }
     @Override public final void engineSetCertificateEntry(String alias, Certificate cert) {
         throw new UnsupportedOperationException("Read-only");

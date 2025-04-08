@@ -6,6 +6,7 @@ import javax.net.ssl.*;
 import javax.crypto.*;
 import java.io.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.text.*;
 import java.security.*;
 import java.security.cert.*;
@@ -171,7 +172,7 @@ class CSCServer implements Server {
                     con.setRequestProperty("Authorization", h);
                 }
             }
-            if (core.isDebug()) {
+            if (core.isDebug("csc")) {
                 for (Map.Entry<String,List<String>> e : con.getRequestProperties().entrySet()) {
                     if (reqh.length() > 0) {
                         reqh += "; ";
@@ -194,7 +195,7 @@ class CSCServer implements Server {
                 json = null;
             }
             in.close();
-            if (core.isDebug()) {
+            if (core.isDebug("csc")) {
                 for (Map.Entry<String,List<String>> e : con.getHeaderFields().entrySet()) {
                     if (resh.length() > 0) {
                         resh += "; ";
@@ -203,7 +204,7 @@ class CSCServer implements Server {
                 }
                 resh = " [" + resh + "]";
                 resh = reqh = "";
-                core.debug(method + " " + url + reqh + sent+" -> "+status+":" + resh + " " + json);
+                core.debug("csc", method + " " + url + reqh + sent+" -> "+status+":" + resh + " " + json);
             }
             Map<String,List<String>> map = new LinkedHashMap<String,List<String>>();
             for (Map.Entry<String,List<String>> e : con.getHeaderFields().entrySet()) {
@@ -305,7 +306,13 @@ class CSCServer implements Server {
                 if (!url.endsWith("/")) {
                     url += "/";
                 }
-                props.put("debug", core.isDebug());
+                if (core.isDebug("oauth2")) {
+                    props.put("debug", new Consumer<String>() {
+                        public void accept(String msg) {
+                            core.debug("oauth2", msg);
+                        }
+                    });
+                }
                 props.put("authorization_endpoint", url + "oauth2/authorize");
                 props.put("token_endpoint", url + "oauth2/token");
                 if (!props.containsKey("scope")) {
@@ -450,7 +457,7 @@ class CSCServer implements Server {
                             if (json.get("cert").size() == 0) {
                                 json.remove("cert");
                             }
-                            PrivateKey key = new NetPrivateKey(this, kid, keyAlg, json);
+                            PrivateKey key = new NetPrivateKey(core, this, kid, keyAlg, json);
                             core.addKey(this, kid, new KeyStore.PrivateKeyEntry(key, certs));
                         } else {
                             core.warning("Ignoring key \"" + kid + "\": unrecognised algorithms " + json.get("key").get("algo"), null);

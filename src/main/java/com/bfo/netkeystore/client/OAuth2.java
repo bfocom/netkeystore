@@ -9,6 +9,7 @@ import java.nio.*;
 import java.nio.charset.*;
 import java.util.*;
 import java.util.Base64;
+import java.util.function.Consumer;
 import java.net.*;
 import javax.security.auth.callback.*;
 
@@ -82,7 +83,7 @@ public class OAuth2 implements Cloneable {
     private SSLContext ssl;
     private RedirectURLHandler redirectHandler;
     private CallbackHandler callbackHandler;
-    private boolean debug;
+    private Consumer<String> debug = null;
     private int timeout = 15*1000, trantimeout = 5*60*1000;
     private Random random;
 
@@ -245,7 +246,19 @@ public class OAuth2 implements Cloneable {
             }
         }
         inlineAuthorization = getBoolean(props, "authorization_inline", false);
-        debug = getBoolean(props, "debug", false);
+        if (properties.get("debug") instanceof Consumer) {
+            @SuppressWarnings("unchecked") Consumer<String> debug = (Consumer<String>)properties.get("debug");
+            this.debug = debug;
+        } else {
+            boolean debug = getBoolean(props, "debug", false);
+            if (debug) {
+                this.debug = new Consumer<String>() {
+                    public void accept(String s) {
+                        System.out.println(s);
+                    }
+                };
+            }
+        }
         String f = getString(props, "flow", "authorization").replaceAll("_-", " ").toLowerCase();
         if ("device".equals(f)) {
             flow = FLOW_DEVICE;
@@ -316,9 +329,6 @@ public class OAuth2 implements Cloneable {
         }
     }
 
-    private void debug(String debug) {
-        System.out.println(debug);
-    }
     private void log(Exception e) {
         e.printStackTrace();
     }
@@ -580,7 +590,7 @@ public class OAuth2 implements Cloneable {
             m.put("client_id", m.remove("inline_client_id"));
         }
         String data = encodeURL(m);
-        StringBuilder debugbuf = debug ? new StringBuilder() : null;
+        StringBuilder debugbuf = debug != null ? new StringBuilder() : null;
 
         if (get && data.length() > 0) {
             url = url + data;
@@ -635,7 +645,7 @@ public class OAuth2 implements Cloneable {
                 debugbuf.append(con.getResponseCode());
                 debugbuf.append(" ");
                 debugbuf.append(text.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r"));
-                debug(debugbuf.toString());
+                debug.accept(debugbuf.toString());
             }
             @SuppressWarnings("unchecked") Map<String,Object> out = (Map<String,Object>)parseJson(CharBuffer.wrap(text));
             out.put(null, con.getResponseCode());
@@ -947,7 +957,7 @@ public class OAuth2 implements Cloneable {
             ctx0 = httpserver.createContext(initialPath, new com.sun.net.httpserver.HttpHandler() {
                 @Override public void handle(com.sun.net.httpserver.HttpExchange t) throws IOException {
                     try {
-                        if (oauth2.debug) oauth2.debug("RedirectURI TX " + auth_uri);
+                        if (oauth2.debug != null) oauth2.debug.accept("RedirectURI TX " + auth_uri);
                         t.getResponseHeaders().add("Location", auth_uri);
                         t.sendResponseHeaders(302, -1);
                         t.close();
@@ -959,7 +969,7 @@ public class OAuth2 implements Cloneable {
             ctx1 = httpserver.createContext(redirectPath, new com.sun.net.httpserver.HttpHandler() {
                 @Override public void handle(com.sun.net.httpserver.HttpExchange t) throws IOException {
                     try {
-                        if (oauth2.debug) oauth2.debug("RedirectURI RX: " + t.getRequestURI());
+                        if (oauth2.debug != null) oauth2.debug.accept("RedirectURI RX: " + t.getRequestURI());
                         t.getResponseHeaders().add("Location", getString(props, "final_uri", "about:blank"));
                         t.sendResponseHeaders(302, -1);
                         t.close();

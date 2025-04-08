@@ -27,7 +27,7 @@ class Core {
     private final Map<String,Server> servers;
     private final Map<String,KeyStore.Entry> entries;
     private final Map<String,String> aliases;
-    private boolean debug;
+    private Collection<String> debug = Collections.<String>emptyList();
     private boolean connected;
     private String authFilename, authPassword, lang;
     private File base;
@@ -95,17 +95,17 @@ class Core {
     /**
      * Return the debug flag
      */
-    public boolean isDebug() {
-        return debug;
+    public boolean isDebug(String type) {
+        return type != null && (debug.contains(type.toLowerCase()) || debug.contains("*"));
     }
 
     /**
      * Issue a debug message
      * @param msg the message
      */
-    public void debug(String msg) {
-        if (isDebug()) {
-            System.out.println("DEBUG: " + msg);
+    public void debug(String type, String msg) {
+        if (isDebug(type)) {
+            System.out.println("DEBUG: [" + type + "] " + msg);
         }
     }
 
@@ -140,7 +140,11 @@ class Core {
             config = Json.read("{}");
             config.put("zeroconf", true);
         }
-        debug = config.booleanValue("debug");
+        if (config.isBoolean("debug")) {
+            debug = config.booleanValue("debug") ? Collections.<String>singletonList("*") : Collections.<String>emptyList();
+        } else if (config.isString("debug")) {
+            debug = Arrays.asList(config.stringValue("debug").toLowerCase().split("  *"));
+        }
         lang = config.stringValue("lang");
         if (lang != null) {
             if ("none".equals(lang)) {

@@ -15,6 +15,7 @@ import com.bfo.json.*;
  */
 class NetPrivateKey implements PrivateKey, Cloneable {
 
+    private final Core core;
     private final Server server;
     private final String name, algname;
     private final Json json;
@@ -27,7 +28,8 @@ class NetPrivateKey implements PrivateKey, Cloneable {
      * @param algname the Java algorithm name of the key, typically "RSA" or "EC"
      * @param json any extra json data for the key, which can be retrieved from {@link #getJson}.
      */
-    NetPrivateKey(Server server, String name, String algname, Json json) {
+    NetPrivateKey(Core core, Server server, String name, String algname, Json json) {
+        this.core = core;
         this.server = server;
         this.name = name;
         this.algname = algname;
@@ -43,14 +45,17 @@ class NetPrivateKey implements PrivateKey, Cloneable {
     }
 
     @Override public String getAlgorithm() {
+        if (core.isDebug("trace")) core.debug("trace", "PrivateKey.getAlgorithm()");
         return algname;
     }
 
     @Override public String getFormat() {
+        if (core.isDebug("trace")) core.debug("trace", "PrivateKey.getFormat()");
         return NetProvider.KEYSTORE_TYPE;
     }
 
     @Override public byte[] getEncoded() {
+        if (core.isDebug("trace")) core.debug("trace", "PrivateKey.getEncoded()");
         return json.toString().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -88,6 +93,16 @@ class NetPrivateKey implements PrivateKey, Cloneable {
      */
     KeyStore.ProtectionParameter getProtectionParameter() {
         return protection;
+    }
+
+    public String toString( ){
+        Json j = Json.read("{}");
+        j.put("class", getClass().getName());
+        j.put("name", name);
+        j.put("alg", algname);
+        j.put("data", json);
+        j.put("super", super.toString());
+        return j.toString();
     }
 
 }

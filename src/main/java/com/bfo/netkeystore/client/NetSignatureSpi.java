@@ -13,6 +13,7 @@ import com.bfo.json.*;
 public class NetSignatureSpi extends SignatureSpi {
 
     private final NetProvider provider;
+    private final Core core;
     private final SignatureAlgorithm algo;
     private NetPrivateKey privateKey;
     private AlgorithmParameters params;
@@ -22,6 +23,7 @@ public class NetSignatureSpi extends SignatureSpi {
 
     NetSignatureSpi(Provider.Service service) throws NoSuchAlgorithmException {
         this.provider = (NetProvider)service.getProvider();
+        this.core = provider.getCore();
         String algoName = service.getAlgorithm();
         this.algo = provider.getCore().getSignatureAlgorithm(algoName);
         if (algo == null) {
@@ -47,19 +49,22 @@ public class NetSignatureSpi extends SignatureSpi {
      */
     @SuppressWarnings({"deprecation", "dep-ann"})
     @Deprecated
-    protected Object engineGetParameter(String param) {
+    @Override protected Object engineGetParameter(String param) {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineGetParameter(\"" + param + "\")");
         throw new InvalidParameterException();
     }
 
-    protected AlgorithmParameters engineGetParameters() {
+    @Override protected AlgorithmParameters engineGetParameters() {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineGetParameters()");
         return params;
     }
 
-    protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
+    @Override protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
         engineInitSign(privateKey, null);
     }
 
-    protected void engineInitSign(PrivateKey privateKey, SecureRandom random) throws InvalidKeyException {
+    @Override protected void engineInitSign(PrivateKey privateKey, SecureRandom random) throws InvalidKeyException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineInitSign(" + privateKey + ", " + random + ")");
         if (!(privateKey instanceof NetPrivateKey)) {
             throw new InvalidKeyException("Key is " + (privateKey == null ? "null" : privateKey.getClass().getName()));
         }
@@ -73,7 +78,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+    @Override protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineInitVerify(" + publicKey + ")");
         this.verifySignature.initVerify(publicKey);
         this.privateKey = null;
     }
@@ -83,11 +89,12 @@ public class NetSignatureSpi extends SignatureSpi {
      */
     @SuppressWarnings({"deprecation", "dep-ann"})
     @Deprecated
-    protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
+    @Override protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
         throw new InvalidParameterException();
     }
 
-    protected void engineSetParameter(AlgorithmParameterSpec paramSpec) throws InvalidAlgorithmParameterException {
+    @Override protected void engineSetParameter(AlgorithmParameterSpec paramSpec) throws InvalidAlgorithmParameterException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineSetParameter(" + paramSpec + ")");
         try {
             AlgorithmParameters params = AlgorithmParameters.getInstance(algo.oid());
             params.init(paramSpec);
@@ -99,7 +106,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected void engineUpdate(byte b) throws SignatureException {
+    @Override protected void engineUpdate(byte b) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(byte)");
         if (privateKey == null) {
             verifySignature.update(b);
         } else if (digest != null) {
@@ -111,7 +119,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected void engineUpdate(byte[] b, int off, int len) throws SignatureException {
+    @Override protected void engineUpdate(byte[] b, int off, int len) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(bytes[" + off + ","+len+" of " + b.length + "])");
         if (privateKey == null) {
             verifySignature.update(b, off, len);
         } else if (digest != null) {
@@ -123,7 +132,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected void engineUpdate(ByteBuffer input) {
+    @Override protected void engineUpdate(ByteBuffer input) {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(ByteBuffer with " + input.remaining() + " remaining)");
         if (privateKey == null) {
             try {
                 verifySignature.update(input);
@@ -139,11 +149,12 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected boolean engineVerify(byte[] sigBytes) throws SignatureException {
+    @Override protected boolean engineVerify(byte[] sigBytes) throws SignatureException {
         return engineVerify(sigBytes, 0, sigBytes.length);
     }
 
-    protected boolean engineVerify(byte[] b, int off, int len) throws SignatureException {
+    @Override protected boolean engineVerify(byte[] b, int off, int len) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineVerify(bytes[" + off + ","+len+" of " + b.length + "])");
         if (privateKey != null) {
             throw new SignatureException("Not initialized for verifying");
         } else {
@@ -151,7 +162,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
     
-    protected byte[] engineSign() throws SignatureException {
+    @Override protected byte[] engineSign() throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineSign()");
         if (privateKey == null) {
             throw new SignatureException("Not initialized for signing");
         }
@@ -173,7 +185,7 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected int engineSign(byte[] b, int off, int len) throws SignatureException {
+    @Override protected int engineSign(byte[] b, int off, int len) throws SignatureException {
         byte[] sig = engineSign();
         if (b.length > len) {
             throw new IllegalArgumentException("Need " + b.length +" bytes for signature, only given " + len);
