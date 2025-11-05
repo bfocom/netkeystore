@@ -104,11 +104,15 @@ public class TestClient {
                 return storeProt;
             }
         });
-        System.out.println("Available keys: ");
+        List<String> keys = new ArrayList<String>();
         for (Enumeration<String> e = keystore.aliases();e.hasMoreElements();) {
-            String a = e.nextElement();
+            keys.add(e.nextElement());
+        }
+        Collections.sort(keys);
+        System.out.println("Available keys: ");
+        for (String a : keys) {
             if (alias == null) {
-                alias = a;      // If none specified, choose the first available
+                alias = a;      // If none specified, choose the alphabetically first available
             }
             System.out.println((alias.equals(a) ? "* " : "  ") + "\"" + a + "\"");
         }
@@ -122,21 +126,21 @@ public class TestClient {
         PrivateKey privkey = entry.getPrivateKey();
         PublicKey pubkey = keystore.getCertificate(alias).getPublicKey();
         if (sigAlgorithm == null) {
-            // Make guess at the signature algorithm based on the key. Typically  you know what
-            // sort of key you have so this isn't necessary.
+            // Make guess at the signature algorithm based on the key. Typically you know what
+            // sort of key you have so this ugliness isn't necessary, which is fortunate.
             if ("RSA".equals(pubkey.getAlgorithm())) {
                 sigAlgorithm = "SHA256withRSA";
             } else if ("EC".equals(pubkey.getAlgorithm())) {
-                String s = ((java.security.interfaces.ECKey)pubkey).getParams().toString();
-                if (s.contains("secp384")) {    // Make wild assumptions about toString
-                    sigAlgorithm = "SHA384withECDSA";
-                } else if (s.contains("secp521")) {
-                    sigAlgorithm = "SHA512withECDSA";
-                } else {
-                    sigAlgorithm = "SHA256withECDSA";
-                }
+                int len = pubkey.getEncoded().length;
+                sigAlgorithm = len > 140 ? "SHA512withECDSA" : len > 110 ? "SHA384withECDSA" : "SHA256withECDSA";
+            } else if ("EdDSA".equals(pubkey.getAlgorithm())) {
+                int len = pubkey.getEncoded().length;
+                sigAlgorithm = len > 55 ? "Ed448" : "Ed25519";
+            } else if ("ML-DSA".equals(pubkey.getAlgorithm())) {
+                int len = pubkey.getEncoded().length;
+                sigAlgorithm = len > 2600 ? "ML-DSA-87" : len > 1600 ? "ML-DSA-65" : "ML-DSA-44";
             } else {
-                throw new IllegalStateException("Unknown key type \"" + pubkey.getAlgorithm() + "\"");
+                sigAlgorithm = pubkey.getAlgorithm();
             }
         }
 

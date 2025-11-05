@@ -17,19 +17,40 @@ import javax.security.auth.callback.*;
 import com.bfo.json.*;
 
 /**
- * A Server represents a network-based signature provider. The configuration for a {@link NetProvider} will
- * generally define one or more Servers, and more may be found via Zeroconf
+ * <p>
+ * A Server represents a network-based signature provider. The configuration
+ * for a {@link NetProvider} will generally define one or more Servers, and
+ * more may be found via Zeroconf
+ * </p><p>
+ * To extend this package with more network protocols, simply add a new
+ * implementation of this class and update the {@link #getServer} method
+ * to return it.
+ * </p>
  */
 public interface Server {
 
     /**
+     * Return a new {@link Server} matching the specified type, or null
+     * if no such implementation exists
+     */
+    public static Server getServer(String type) {
+        switch (type.toLowerCase()) {
+          case "csc":
+            return new CSCServer();
+          default:
+            return null;
+        }
+    }
+
+    /**
      * Configure the server
+     * @param core the core the core for this Server
      * @param name the server name
      * @param config the configuration
      * @param auto if true, the server has been auto-configured from Zeroconf
      * @throws Exception if the server failed to configure
      */
-    public void configure(String name, Json config, boolean auto) throws Exception;
+    public void configure(Core core, String name, Json config, boolean auto) throws Exception;
 
     /**
      * Login to the server. Called from {@link AuthProvider#login}, or the first

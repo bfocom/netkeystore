@@ -10,10 +10,10 @@ import javax.crypto.*;
 import javax.security.auth.Subject;
 import java.io.*;
 import com.bfo.json.*;
-import com.bfo.zeroconf.*;
 
 /**
- * The underpinning of the NetProvider
+ * The underpinning of the NetProvider.
+ * Not public, but if you're implementing a new Server you'll ned to know about it.
  */
 class Core {
 
@@ -26,14 +26,13 @@ class Core {
     private final Map<String,Server> servers;
     private final Map<String,KeyStore.Entry> entries;
     private final Map<String,String> aliases;
-    private boolean debug;
+    private Collection<String> debug = Collections.<String>emptyList();
     private boolean connected;
     private String authFilename, authPassword, lang;
     private File base;
     private KeyStore authKeystore;
     private Json authorizations;
-    private Zeroconf zeroconf;
-    private ZeroconfListener zeroconfListener;
+    private ZeroconfSupport zeroconf;
     private long initComplete;
 
     Core(NetProvider provider) {
@@ -48,12 +47,111 @@ class Core {
         }
     }
 
+    /**
+     * Add a new Key
+     * @param server the server adding the key
+     * @param name the name of the key
+     * @param Keystore.Entry the KeyStore.Entry
+     */
+    public void addKey(Server server, String name, KeyStore.PrivateKeyEntry entry) {
+        if (!(entry.getPrivateKey() instanceof NetPrivateKey)) {
+            throw new IllegalArgumentException("The Key must be a NetPrivateKey");
+        }
+        String serverName = null;
+        for (Map.Entry<String,Server> e : servers.entrySet()) {
+            if (e.getValue() == server) {
+                serverName = e.getKey();
+                break;
+            }
+        }
+        if (serverName == null) {
+            throw new IllegalArgumentException("Unrecognised server");
+        }
+        name = serverName + "/" + name;
+        entries.put(name, entry);
+        for (Map.Entry<String,String> e : aliases.entrySet()) {
+            if (e.getValue().equals(name)) {
+                entries.put(e.getKey(), entry);
+            }
+        }
+    }
+
+    /**
+     * Return the language defined in the configuration, or null
+     */
+    public String getLanguage() {
+        return lang;
+    }
+
+    /**
+     * Return the "base" file defined in the configuration, or null
+     */
+    public File getBase() {
+        return base;
+    }
+
+    /**
+     * Return the debug flag
+     */
+    public boolean isDebug(String type) {
+        return type != null && (debug.contains(type.toLowerCase()) || debug.contains("*"));
+    }
+
+    /**
+     * Issue a debug message
+     * @param msg the message
+     */
+    public void debug(String type, String msg) {
+        if (isDebug(type)) {
+            System.out.println("DEBUG: [" + type + "] " + msg);
+        }
+    }
+
+    /**
+     * Log a warning
+     * @param msg the message
+     * @param throwable an optional throwable
+     */
+    public void warning(String msg, Throwable throwable) {
+        try {
+            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg, throwable);   // If compiling under Java8, remove this line
+            return;                                                                                 // If compiling under Java8, remove this line
+        } catch (Throwable e) {}
+        try {
+            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").log(java.util.logging.Level.WARNING, msg, throwable);
+        } catch (Throwable e2) {
+            System.out.println("WARNING: " + msg);
+            if (throwable != null) {
+                throwable.printStackTrace();
+            }
+        }
+    }
+
+    //-------------------------------------------------------------------------------------------
+    // Methods below here aren't important if you're just adding a new Server instance
+    //-------------------------------------------------------------------------------------------
+
+    /**
+     * Add a new supported SignatureAlgorithm. Call this method as often
+     * as needed to add all algorithms supported by keys, so the Provider
+     * knows which algorithms to accept
+     */
     void configure(Json config) throws Exception {
+        boolean haszeroconf;
+        try {
+            haszeroconf = ZeroconfSupport.class != null;
+        } catch (Throwable e) {
+            haszeroconf = false;
+        }
         if (config == null) {
             config = Json.read("{}");
-            config.put("zeroconf", true);
+            config.put("zeroconf", haszeroconf);
         }
-        debug = config.booleanValue("debug");
+        if (config.isBoolean("debug")) {
+            debug = config.booleanValue("debug") ? Collections.<String>singletonList("*") : Collections.<String>emptyList();
+        } else if (config.isString("debug")) {
+            debug = Arrays.asList(config.stringValue("debug").toLowerCase().split("  *"));
+        }
         lang = config.stringValue("lang");
         if (lang != null) {
             if ("none".equals(lang)) {
@@ -92,53 +190,39 @@ class Core {
             for (Map.Entry<Object,Json> e : config.get("servers").mapValue().entrySet()) {
                 final String name = e.getKey().toString();
                 Json serverJson = e.getValue();
-                if (!servers.containsKey(name) && !serverJson.booleanValue("disabled")) {
+                if (!serverJson.booleanValue("disabled")) {
                     addServer(name, serverJson, false);
                 }
             }
         }
 
-        if (!config.isBoolean("zeroconf") || config.booleanValue("zeroconf")) {
-            zeroconf = new Zeroconf();
-            zeroconf.query(SERVICE, null);
-            zeroconf.addListener(zeroconfListener = new ZeroconfListener() {
-                @Override public void serviceNamed(String type, String name) {
-                    if (type.equals(SERVICE)) {
-                        zeroconf.query(type, name);
-                    }
-                }
-                @Override public void serviceAnnounced(Service service) {
-                    if (SERVICE.equals(service.getType()) && !service.getAddresses().isEmpty()) {
-                        InetSocketAddress address = new InetSocketAddress(service.getAddresses().iterator().next(), service.getPort());
-                        if ("2".equals(service.getText().get("version"))) {
-                            try {
-                                String name = service.getName();
-                                Json json = Json.read(service.getText().get("config"));
-                                if (!servers.containsKey(name)) {
-                                    addServer(name, json, true);
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-                }
-                @Override public void serviceExpired(Service service) {
-                    if (SERVICE.equals(service.getType())) {
-                        String name = service.getName();
-                        removeServer(name, true);
-                    }
-                }
-            });
+        if (config.isBoolean("zeroconf") ? config.booleanValue("zeroconf") : haszeroconf) {
+            try {
+                zeroconf = new ZeroconfSupport(this);
+            } catch (Error e) {
+                throw new IllegalStateException("zeroconf requested but com.bfo.zeroconf package not available");
+            }
             int delay = config.isNumber("zeroconf-wait") ? config.numberValue("zeroconf-wait").intValue() : ZEROCONFDELAY;
             if (delay < 0 || delay > 5000) {    // 5s is orders of magnitude more than will ever be required
                 delay = ZEROCONFDELAY;
             }
             initComplete = Math.max(initComplete, System.currentTimeMillis() + delay);
+        } else if (servers.isEmpty()) {
+            warning("NetKeyStore will always be empty: no servers configured and zeroconf is disabled", null);
         }
     }
 
-    private void addServer(String name, Json json, boolean auto) throws Exception {
+    /**
+     * Add a Server if it doesn't already exist
+     * @param name the unique name
+     * @param json the configuration
+     * @param auto if true, the server was auto-discovered by Zeroconf
+     * @return true if the server was added, false if a server of that name already existed
+     */
+    boolean addServer(String name, Json json, boolean auto) throws Exception {
+        if (servers.containsKey(name)) {
+            return false;
+        }
         String type = json.stringValue("type");
         json = Json.read(json.toString()); // clone
         if (authorizations.isMap(name)) {
@@ -147,20 +231,30 @@ class Core {
         Server server = null;
         if (type == null) {
             throw new IllegalArgumentException("Server \"" + name + "\" missing required \"type\" property");
-        } else if ("csc".equals(type)) {
-            server = new CSCServer(this);
         } else {
-            throw new IllegalArgumentException("Server \"" + name + "\" invalid type \"" + type + "\"");
+            server = Server.getServer(type);
+            if (server == null) {
+                throw new IllegalArgumentException("Server \"" + name + "\" invalid type \"" + type + "\"");
+            }
         }
-        server.configure(name, json, auto);
+        server.configure(this, name, json, auto);
         servers.put(name, server);
+        return true;
     }
 
-    private void removeServer(String name, boolean auto) {
+    /**
+     * Shut down and remove a Server
+     * @param name the unique name
+     * @param auto if true, the server was auto-discovered by Zeroconf
+     * @return true if the server was successfully shut down and removed, false if shutdown failed.
+     */
+    boolean removeServer(String name, boolean auto) {
         Server server = servers.get(name);
         boolean remove = false;
         try {
-            remove = server.shutdown(auto);
+            if (server != null) {
+                remove = server.shutdown(auto);
+            }
         } catch (Exception e) {
             remove = true;
         }
@@ -178,6 +272,7 @@ class Core {
                 }
             }
         }
+        return remove;
     }
 
     synchronized void waitUntilInitialized() {
@@ -187,36 +282,6 @@ class Core {
             try {
                 Thread.sleep((int)diff);
             } catch (InterruptedException e) {}
-        }
-    }
-
-    String getLang() {
-        return lang;
-    }
-
-    File getBase() {
-        return base;
-    }
-
-    boolean isDebug() {
-        return debug;
-    }
-
-    void debug(String msg) {
-        if (isDebug()) {
-            System.out.println("DEBUG: " + msg);
-        }
-    }
-
-    void warning(String msg) {
-        try {
-            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);   // If compiling under Java8, remove this line
-            return;                                                                                 // If compiling under Java8, remove this line
-        } catch (Throwable e) {}
-        try {
-            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
-        } catch (Throwable e2) {
-            System.out.println("WARNING: " + msg);
         }
     }
 
@@ -253,16 +318,7 @@ class Core {
         }
     }
 
-    void addKey(String name, KeyStore.Entry entry) {
-        entries.put(name, entry);
-        for (Map.Entry<String,String> e : aliases.entrySet()) {
-            if (e.getValue().equals(name)) {
-                entries.put(e.getKey(), entry);
-            }
-        }
-    }
-
-    void addSignatureAlgorithm(SignatureAlgorithm algorithm) {
+    public void addSignatureAlgorithm(SignatureAlgorithm algorithm) {
         provider.addSignatureAlgorithm(algorithm);
     }
 
@@ -317,7 +373,9 @@ class Core {
         }
         if (authorizations == null) {
             if (authPassword != null) {
-                if (authFilename == null || authFilename.endsWith(".jks")) {
+                if (authFilename == null) {
+                    authKeystore = KeyStore.getInstance(KeyStore.getDefaultType());
+                } else if (authFilename.endsWith(".jks")) {
                     authKeystore = KeyStore.getInstance("JKS");
                 } else if (authFilename.endsWith(".jceks")) {
                     authKeystore = KeyStore.getInstance("JCEKS");
@@ -355,12 +413,26 @@ class Core {
         }
     }
 
-    Json getAuthorization(String name) {
+    /**
+     * Return any "authorization" data previously set by {@link #setAuthorization},
+     * or null if none exists.
+     * @param name the name
+     */
+    public Json getAuthorization(String name) {
         return authorizations.get(name);
     }
 
-    void setAuthorization(String name, Json json) {
-        authorizations.put(name, json);
+    /**
+     * Set the "authorization" data for the specified server name, or null to delete it.
+     * @param name the name
+     * @param json the authorization data
+     */
+    public void setAuthorization(String name, Json json) {
+        if (json == null) {
+            authorizations.remove(name);
+        } else {
+            authorizations.put(name, json);
+        }
         try {
             saveAuthorization();
         } catch (Exception e) {
@@ -378,7 +450,15 @@ class Core {
 
     //----------------------------------------------------------------------------------------
 
-    KeyStore loadKeyStore(String path, String password) throws Exception {
+    /**
+     * A support method to load a KeyStore from the supplied path,
+     * because Java 8 doesn't have Keytore.getInstance(file, password)
+     * @param path the file path
+     * @param password the password
+     * @return the keystore
+     * @throws IOException if the KeyStore fails to load
+     */
+    public KeyStore loadKeyStore(String path, String password) throws Exception {
         File file = new File(base, path);
         if (file.canRead()) {
             try {
@@ -422,6 +502,7 @@ class Core {
     }
 
 
+    // convenience methods
     X509Certificate decodeCertificate(String s) {
         try {
             s = s.replace("-","+").replace("_","/");      // just in case, convert from url-format
@@ -435,6 +516,5 @@ class Core {
     String encodeCertificate(X509Certificate cert) throws Exception {
         return Base64.getEncoder().encodeToString(cert.getEncoded());
     }
-
 
 }

@@ -6,6 +6,7 @@ import javax.net.ssl.*;
 import javax.crypto.*;
 import java.io.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.text.*;
 import java.security.*;
 import java.security.cert.*;
@@ -22,9 +23,9 @@ import com.bfo.json.*;
 class CSCServer implements Server {
 
     private static final int TIMEOUT = 15;      // seconds
-    private final Core core;
+    private Core core;
     private boolean auto;
-    private Collection<SignatureAlgorithm> acceptedAlgorithms;
+    private Collection<SignatureAlgorithm> acceptedAlgorithms = new HashSet<SignatureAlgorithm>();
     private String name;
     private Json config, info;
     private int version;
@@ -33,12 +34,11 @@ class CSCServer implements Server {
     private Authentication auth;
     private HostnameVerifier hostnameVerifier;
 
-    CSCServer(Core core) {
+    @Override public void configure(Core core, String name, Json config, boolean auto) throws Exception {
+        if (this.core != null) {
+            throw new IllegalStateException("Already configured");
+        }
         this.core = core;
-        acceptedAlgorithms = new HashSet<SignatureAlgorithm>();
-    }
-
-    @Override public void configure(String name, Json config, boolean auto) throws Exception {
         this.auto = auto;
         this.name = name;
         this.config = config;
@@ -172,7 +172,7 @@ class CSCServer implements Server {
                     con.setRequestProperty("Authorization", h);
                 }
             }
-            if (core.isDebug()) {
+            if (core.isDebug("csc")) {
                 for (Map.Entry<String,List<String>> e : con.getRequestProperties().entrySet()) {
                     if (reqh.length() > 0) {
                         reqh += "; ";
@@ -195,7 +195,7 @@ class CSCServer implements Server {
                 json = null;
             }
             in.close();
-            if (core.isDebug()) {
+            if (core.isDebug("csc")) {
                 for (Map.Entry<String,List<String>> e : con.getHeaderFields().entrySet()) {
                     if (resh.length() > 0) {
                         resh += "; ";
@@ -204,7 +204,7 @@ class CSCServer implements Server {
                 }
                 resh = " [" + resh + "]";
                 resh = reqh = "";
-                core.debug(method + " " + url + reqh + sent+" -> "+status+":" + resh + " " + json);
+                core.debug("csc", method + " " + url + reqh + sent+" -> "+status+":" + resh + " " + json);
             }
             Map<String,List<String>> map = new LinkedHashMap<String,List<String>>();
             for (Map.Entry<String,List<String>> e : con.getHeaderFields().entrySet()) {
@@ -306,7 +306,13 @@ class CSCServer implements Server {
                 if (!url.endsWith("/")) {
                     url += "/";
                 }
-                props.put("debug", core.isDebug());
+                if (core.isDebug("oauth2")) {
+                    props.put("debug", new Consumer<String>() {
+                        public void accept(String msg) {
+                            core.debug("oauth2", msg);
+                        }
+                    });
+                }
                 props.put("authorization_endpoint", url + "oauth2/authorize");
                 props.put("token_endpoint", url + "oauth2/token");
                 if (!props.containsKey("scope")) {
@@ -361,8 +367,8 @@ class CSCServer implements Server {
 
     @Override public void login(Subject subject, KeyStore.ProtectionParameter prot) throws IOException {
         Json json = Json.read("{}");
-        if (core.getLang() != null) {
-            json.put("lang", core.getLang());
+        if (core.getLanguage() != null) {
+            json.put("lang", core.getLanguage());
         }
         Reply reply = send("POST", baseurl() + "info", json, null);
         if (reply.code == 200) {
@@ -424,8 +430,8 @@ class CSCServer implements Server {
                 json.put("certificates", "chain");
                 json.put("certInfo", true);
                 json.put("authInfo", true);
-                if (core.getLang() != null) {
-                    json.put("lang", core.getLang());
+                if (core.getLanguage() != null) {
+                    json.put("lang", core.getLanguage());
                 }
                 reply = send("POST", baseurl() + "credentials/info", json, auth);
                 json = reply.json;
@@ -451,10 +457,13 @@ class CSCServer implements Server {
                             if (json.get("cert").size() == 0) {
                                 json.remove("cert");
                             }
-                            PrivateKey key = new NetPrivateKey(this, kid, keyAlg, json);
-                            core.addKey(this.name + "/" + kid, new KeyStore.PrivateKeyEntry(key, certs));
+                            // Supported keys have known types (RSA, ECDSA) etc defined in Java standard names.
+                            // Unsupported types (eg ML-DSA on older VMs) will only have an OID, and will crash if they don't match.
+                            keyAlg = certs[0].getPublicKey().getAlgorithm();
+                            PrivateKey key = new NetPrivateKey(core, this, kid, keyAlg, json);
+                            core.addKey(this, kid, new KeyStore.PrivateKeyEntry(key, certs));
                         } else {
-                            core.warning("Ignoring key \"" + kid + "\": unrecognised algorithms " + json.get("key").get("algo"));
+                            core.warning("Ignoring key \"" + kid + "\": unrecognised algorithms " + json.get("key").get("algo"), null);
                         }
                     } else {
 //                        core.warning("Ignoring disabled key \"" + kid + "\"");
@@ -493,8 +502,8 @@ class CSCServer implements Server {
         final Json keyjson = key.getJson();
         final Json json = Json.read("{}");
 
-        if (core.getLang() != null) {
-            json.put("lang", core.getLang());
+        if (core.getLanguage() != null) {
+            json.put("lang", core.getLanguage());
         }
 
         if ("implicit".equals(keyjson.stringValue("authMode"))) {

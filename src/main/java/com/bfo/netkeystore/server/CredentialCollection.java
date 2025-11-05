@@ -97,8 +97,13 @@ public class CredentialCollection {
                                     keyinfo.put("len", cipher.getOutputSize(0) * 8);
                                 } catch (Exception ex) {}
                             } else {
-                                JWK jwk = new JWK(pubkey);
-                                if (jwk.isString("crv")) {
+                                JWK jwk = null;
+                                try {
+                                    jwk = new JWK(pubkey);
+                                } catch (Exception e3) { }
+                                if (jwk == null) {
+                                    // skip
+                                } else if (jwk.isString("crv")) {
                                     String curve = jwk.stringValue("crv");
                                     keyinfo.put("curve", curve);
                                     switch(curve) {
@@ -108,9 +113,13 @@ public class CredentialCollection {
                                         // Not currently supported, an non-trivial.
                                         //  -- see https://datatracker.ietf.org/doc/html/rfc8032
                                         //  -- see https://github.com/str4d/ed25519-java/blob/master/src/net/i2p/crypto/eddsa/EdDSAEngine.java
-                                        //  -- see https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/ec/ed/EdDSAParameters.java etc
-                                        // case "Ed25519": algolist.put(0, SignatureAlgorithm.get("Ed25519").oid); break;
-                                        // case "Ed448": algolist.put(0, SignatureAlgorithm.get("Ed448").oid); break;
+                                        case "Ed25519": algolist.put(0, SignatureAlgorithm.get("Ed25519").oid()); break;
+                                        case "Ed448": algolist.put(0, SignatureAlgorithm.get("Ed448").oid()); break;
+                                    }
+                                } else if ("AKP".equals(jwk.stringValue("kty"))) {
+                                    SignatureAlgorithm alg = SignatureAlgorithm.get(jwk.stringValue("alg"));
+                                    if (alg != null) {
+                                        algolist.put(0, alg.oid());
                                     }
                                 }
                             }
@@ -124,6 +133,8 @@ public class CredentialCollection {
                                 }
                                 Credential c = new MyCredential(keystore, keystoreName, keyName, fullName, keyconfig, keyinfo);
                                 credentials.add(c);
+                            } else {
+                                System.out.println("Skipping key \"" + keyName + "\" with unsupported algorithm \"" + certs[0].getPublicKey().getAlgorithm() + "\"");
                             }
                         }
                     }

@@ -2,6 +2,7 @@ package com.bfo.netkeystore.client;
 
 import java.io.*;
 import java.nio.*;
+import java.util.*;
 import java.security.*;
 import java.security.spec.*;
 import java.util.concurrent.*;
@@ -12,16 +13,20 @@ import com.bfo.json.*;
  */
 public class NetSignatureSpi extends SignatureSpi {
 
+    private static final int INIT_PSEUDO_LENGTH = 512;  // More than enough for any hash algorithm
     private final NetProvider provider;
+    private final Core core;
     private final SignatureAlgorithm algo;
     private NetPrivateKey privateKey;
     private AlgorithmParameters params;
     private Signature verifySignature;
     private MessageDigest digest;
-    private ByteBuffer noneDigest;
+    private byte[] pseudoDigest;
+    private int pseudoDigestLength;
 
     NetSignatureSpi(Provider.Service service) throws NoSuchAlgorithmException {
         this.provider = (NetProvider)service.getProvider();
+        this.core = provider.getCore();
         String algoName = service.getAlgorithm();
         this.algo = provider.getCore().getSignatureAlgorithm(algoName);
         if (algo == null) {
@@ -29,7 +34,7 @@ public class NetSignatureSpi extends SignatureSpi {
         }
         algoName = algo.name();
         this.digest = algo.digestAlgorithm() == null ? null : MessageDigest.getInstance(algo.digestAlgorithm());
-        this.noneDigest = digest == null ? null : ByteBuffer.allocate(512);
+        this.pseudoDigest = new byte[INIT_PSEUDO_LENGTH];
         for (Provider provider : Security.getProviders()) {
             if (!(provider instanceof NetProvider)) {
                 try {
@@ -47,19 +52,22 @@ public class NetSignatureSpi extends SignatureSpi {
      */
     @SuppressWarnings({"deprecation", "dep-ann"})
     @Deprecated
-    protected Object engineGetParameter(String param) {
+    @Override protected Object engineGetParameter(String param) {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineGetParameter(\"" + param + "\")");
         throw new InvalidParameterException();
     }
 
-    protected AlgorithmParameters engineGetParameters() {
+    @Override protected AlgorithmParameters engineGetParameters() {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineGetParameters()");
         return params;
     }
 
-    protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
+    @Override protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
         engineInitSign(privateKey, null);
     }
 
-    protected void engineInitSign(PrivateKey privateKey, SecureRandom random) throws InvalidKeyException {
+    @Override protected void engineInitSign(PrivateKey privateKey, SecureRandom random) throws InvalidKeyException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineInitSign(" + privateKey + ", " + random + ")");
         if (!(privateKey instanceof NetPrivateKey)) {
             throw new InvalidKeyException("Key is " + (privateKey == null ? "null" : privateKey.getClass().getName()));
         }
@@ -69,11 +77,15 @@ public class NetSignatureSpi extends SignatureSpi {
         if (this.digest != null) {
             this.digest.reset();
         } else {
-            this.noneDigest.clear();
+            pseudoDigestLength = 0;
         }
     }
 
-    protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+    @Override protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+        if (verifySignature == null) {
+            throw new InvalidKeyException("Unable to verify signature with algorithm \"" + publicKey.getAlgorithm() + "\", no local implementation");
+        }
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineInitVerify(" + publicKey + ")");
         this.verifySignature.initVerify(publicKey);
         this.privateKey = null;
     }
@@ -83,11 +95,12 @@ public class NetSignatureSpi extends SignatureSpi {
      */
     @SuppressWarnings({"deprecation", "dep-ann"})
     @Deprecated
-    protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
+    @Override protected void engineSetParameter(String param, Object value) throws InvalidParameterException {
         throw new InvalidParameterException();
     }
 
-    protected void engineSetParameter(AlgorithmParameterSpec paramSpec) throws InvalidAlgorithmParameterException {
+    @Override protected void engineSetParameter(AlgorithmParameterSpec paramSpec) throws InvalidAlgorithmParameterException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineSetParameter(" + paramSpec + ")");
         try {
             AlgorithmParameters params = AlgorithmParameters.getInstance(algo.oid());
             params.init(paramSpec);
@@ -99,31 +112,37 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected void engineUpdate(byte b) throws SignatureException {
+    @Override protected void engineUpdate(byte b) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(byte)");
         if (privateKey == null) {
             verifySignature.update(b);
         } else if (digest != null) {
             digest.update(b);
-        } else if (noneDigest != null) {
-            noneDigest.put(b);
+        } else if (pseudoDigest != null) {
+            expandPseudoDigest(1);
+            pseudoDigest[pseudoDigestLength++] = b;
         } else {
             throw new SignatureException("Not initialized");
         }
     }
 
-    protected void engineUpdate(byte[] b, int off, int len) throws SignatureException {
+    @Override protected void engineUpdate(byte[] b, int off, int len) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(bytes[" + off + ","+len+" of " + b.length + "])");
         if (privateKey == null) {
             verifySignature.update(b, off, len);
         } else if (digest != null) {
             digest.update(b, off, len);
-        } else if (noneDigest != null) {
-            noneDigest.put(b, off, len);
+        } else if (pseudoDigest != null) {
+            expandPseudoDigest(len);
+            System.arraycopy(b, off, pseudoDigest, pseudoDigestLength, len);
+            pseudoDigestLength += len;
         } else {
             throw new SignatureException("Not initialized");
         }
     }
 
-    protected void engineUpdate(ByteBuffer input) {
+    @Override protected void engineUpdate(ByteBuffer input) {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineUpdate(ByteBuffer with " + input.remaining() + " remaining)");
         if (privateKey == null) {
             try {
                 verifySignature.update(input);
@@ -132,18 +151,28 @@ public class NetSignatureSpi extends SignatureSpi {
             }
         } else if (digest != null) {
             digest.update(input);
-        } else if (noneDigest != null) {
-            noneDigest.put(input);
+        } else if (pseudoDigest != null) {
+            int len = input.remaining();
+            expandPseudoDigest(len);
+            input.get(pseudoDigest, pseudoDigestLength, len);
+            pseudoDigestLength += len;
         } else {
             throw new IllegalStateException("Not initialized");
         }
     }
 
-    protected boolean engineVerify(byte[] sigBytes) throws SignatureException {
+    private void expandPseudoDigest(int len) {
+        if (pseudoDigestLength + len > pseudoDigest.length) {
+            pseudoDigest = Arrays.copyOf(pseudoDigest, Math.max(pseudoDigestLength + len, pseudoDigest.length + (pseudoDigest.length >> 1)));
+        }
+    }
+
+    @Override protected boolean engineVerify(byte[] sigBytes) throws SignatureException {
         return engineVerify(sigBytes, 0, sigBytes.length);
     }
 
-    protected boolean engineVerify(byte[] b, int off, int len) throws SignatureException {
+    @Override protected boolean engineVerify(byte[] b, int off, int len) throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineVerify(bytes[" + off + ","+len+" of " + b.length + "])");
         if (privateKey != null) {
             throw new SignatureException("Not initialized for verifying");
         } else {
@@ -151,7 +180,8 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
     
-    protected byte[] engineSign() throws SignatureException {
+    @Override protected byte[] engineSign() throws SignatureException {
+        if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineSign()");
         if (privateKey == null) {
             throw new SignatureException("Not initialized for signing");
         }
@@ -161,9 +191,9 @@ public class NetSignatureSpi extends SignatureSpi {
             if (digest != null) {
                 data = digest.digest();
             } else {
-                data = new byte[noneDigest.position()];
-                noneDigest.flip();
-                noneDigest.get(data);
+                data = Arrays.copyOf(pseudoDigest, pseudoDigestLength);
+                pseudoDigest = new byte[INIT_PSEUDO_LENGTH];
+                pseudoDigestLength = 0;
             }
             return server.sign(privateKey, algo, params, data);
         } catch (UnrecoverableKeyException e) {
@@ -173,7 +203,7 @@ public class NetSignatureSpi extends SignatureSpi {
         }
     }
 
-    protected int engineSign(byte[] b, int off, int len) throws SignatureException {
+    @Override protected int engineSign(byte[] b, int off, int len) throws SignatureException {
         byte[] sig = engineSign();
         if (b.length > len) {
             throw new IllegalArgumentException("Need " + b.length +" bytes for signature, only given " + len);

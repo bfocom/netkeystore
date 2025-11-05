@@ -44,7 +44,7 @@ public class NetProvider extends AuthProvider {
     }
 
     /**
-     * Creeate a new NetProvider
+     * Create a new NetProvider
      * @param conf the name of the configuration file to load, or the configuration itself.
      * @throws RuntimeException if the configuration cannot be loaded, wrapping IOException
      */
@@ -84,6 +84,7 @@ public class NetProvider extends AuthProvider {
      * @param in the InputStream containing the configuration - unlike the requirements from its superclass, the configuration is formatted in Yaml
      */
     @Override public void load(InputStream in) throws IOException {
+        if (core.isDebug("trace")) core.debug("trace", "Provider.load(" + in + ")");
         try {
             synchronized(this) {
                 if (!configured) {
@@ -106,6 +107,7 @@ public class NetProvider extends AuthProvider {
      * @param conf either the name of a file containing the Yaml configuraition, or the Yaml configuration itself as text.
      */
     public Provider configure(String conf) {
+        if (core.isDebug("trace")) core.debug("trace", "Provider.configure(\"" + conf + "\"");
         // conf is the name of a file or the configuration itself. We exclude filenames with newlines and braces so there should be no ambiguity
         NetProvider dup = new NetProvider(conf);
         dup.callbackHandler = callbackHandler;
@@ -130,10 +132,12 @@ public class NetProvider extends AuthProvider {
     }
 
     @Override public void setCallbackHandler(CallbackHandler handler) {
+        if (core.isDebug("trace")) core.debug("trace", "Provider.setCallbackHandler(" + handler + ")");
         this.callbackHandler = handler;
     }
 
     @Override public void login(Subject subject, CallbackHandler handler) throws LoginException {
+        if (core.isDebug("trace")) core.debug("trace", "Provider.login(" + subject + ", " + handler + ")");
         if (handler == null) {
             handler = callbackHandler;
         }
@@ -150,6 +154,7 @@ public class NetProvider extends AuthProvider {
     }
 
     @Override public void logout() throws LoginException {
+        if (core.isDebug("trace")) core.debug("trace", "Provider.logout()");
         // TODO - revoke any tokens?
         ensureConfigured();
         if (core.isConnected()) {
