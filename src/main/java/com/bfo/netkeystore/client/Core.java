@@ -10,7 +10,6 @@ import javax.crypto.*;
 import javax.security.auth.Subject;
 import java.io.*;
 import com.bfo.json.*;
-import com.bfo.zeroconf.*;
 
 /**
  * The underpinning of the NetProvider.
@@ -33,8 +32,7 @@ class Core {
     private File base;
     private KeyStore authKeystore;
     private Json authorizations;
-    private Zeroconf zeroconf;
-    private ZeroconfListener zeroconfListener;
+    private ZeroconfSupport zeroconf;
     private long initComplete;
 
     Core(NetProvider provider) {
@@ -116,13 +114,16 @@ class Core {
      */
     public void warning(String msg, Throwable throwable) {
         try {
-            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg);   // If compiling under Java8, remove this line
+            System.getLogger("com.bfo.netkeystore.client").log(System.Logger.Level.WARNING, msg, throwable);   // If compiling under Java8, remove this line
             return;                                                                                 // If compiling under Java8, remove this line
         } catch (Throwable e) {}
         try {
-            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").warning(msg);
+            java.util.logging.Logger.getLogger("com.bfo.netkeystore.client").log(java.util.logging.Level.WARNING, msg, throwable);
         } catch (Throwable e2) {
             System.out.println("WARNING: " + msg);
+            if (throwable != null) {
+                throwable.printStackTrace();
+            }
         }
     }
 
@@ -136,9 +137,15 @@ class Core {
      * knows which algorithms to accept
      */
     void configure(Json config) throws Exception {
+        boolean haszeroconf;
+        try {
+            haszeroconf = ZeroconfSupport.class != null;
+        } catch (Throwable e) {
+            haszeroconf = false;
+        }
         if (config == null) {
             config = Json.read("{}");
-            config.put("zeroconf", true);
+            config.put("zeroconf", haszeroconf);
         }
         if (config.isBoolean("debug")) {
             debug = config.booleanValue("debug") ? Collections.<String>singletonList("*") : Collections.<String>emptyList();
@@ -183,53 +190,39 @@ class Core {
             for (Map.Entry<Object,Json> e : config.get("servers").mapValue().entrySet()) {
                 final String name = e.getKey().toString();
                 Json serverJson = e.getValue();
-                if (!servers.containsKey(name) && !serverJson.booleanValue("disabled")) {
+                if (!serverJson.booleanValue("disabled")) {
                     addServer(name, serverJson, false);
                 }
             }
         }
 
-        if (!config.isBoolean("zeroconf") || config.booleanValue("zeroconf")) {
-            zeroconf = new Zeroconf();
-            zeroconf.query(SERVICE, null);
-            zeroconf.addListener(zeroconfListener = new ZeroconfListener() {
-                @Override public void serviceNamed(String type, String name) {
-                    if (type.equals(SERVICE)) {
-                        zeroconf.query(type, name);
-                    }
-                }
-                @Override public void serviceAnnounced(Service service) {
-                    if (SERVICE.equals(service.getType()) && !service.getAddresses().isEmpty()) {
-                        InetSocketAddress address = new InetSocketAddress(service.getAddresses().iterator().next(), service.getPort());
-                        if ("2".equals(service.getText().get("version"))) {
-                            try {
-                                String name = service.getName();
-                                Json json = Json.read(service.getText().get("config"));
-                                if (!servers.containsKey(name)) {
-                                    addServer(name, json, true);
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    }
-                }
-                @Override public void serviceExpired(Service service) {
-                    if (SERVICE.equals(service.getType())) {
-                        String name = service.getName();
-                        removeServer(name, true);
-                    }
-                }
-            });
+        if (config.isBoolean("zeroconf") ? config.booleanValue("zeroconf") : haszeroconf) {
+            try {
+                zeroconf = new ZeroconfSupport(this);
+            } catch (Error e) {
+                throw new IllegalStateException("zeroconf requested but com.bfo.zeroconf package not available");
+            }
             int delay = config.isNumber("zeroconf-wait") ? config.numberValue("zeroconf-wait").intValue() : ZEROCONFDELAY;
             if (delay < 0 || delay > 5000) {    // 5s is orders of magnitude more than will ever be required
                 delay = ZEROCONFDELAY;
             }
             initComplete = Math.max(initComplete, System.currentTimeMillis() + delay);
+        } else if (servers.isEmpty()) {
+            warning("NetKeyStore will always be empty: no servers configured and zeroconf is disabled", null);
         }
     }
 
-    private void addServer(String name, Json json, boolean auto) throws Exception {
+    /**
+     * Add a Server if it doesn't already exist
+     * @param name the unique name
+     * @param json the configuration
+     * @param auto if true, the server was auto-discovered by Zeroconf
+     * @return true if the server was added, false if a server of that name already existed
+     */
+    boolean addServer(String name, Json json, boolean auto) throws Exception {
+        if (servers.containsKey(name)) {
+            return false;
+        }
         String type = json.stringValue("type");
         json = Json.read(json.toString()); // clone
         if (authorizations.isMap(name)) {
@@ -246,13 +239,22 @@ class Core {
         }
         server.configure(this, name, json, auto);
         servers.put(name, server);
+        return true;
     }
 
-    private void removeServer(String name, boolean auto) {
+    /**
+     * Shut down and remove a Server
+     * @param name the unique name
+     * @param auto if true, the server was auto-discovered by Zeroconf
+     * @return true if the server was successfully shut down and removed, false if shutdown failed.
+     */
+    boolean removeServer(String name, boolean auto) {
         Server server = servers.get(name);
         boolean remove = false;
         try {
-            remove = server.shutdown(auto);
+            if (server != null) {
+                remove = server.shutdown(auto);
+            }
         } catch (Exception e) {
             remove = true;
         }
@@ -270,6 +272,7 @@ class Core {
                 }
             }
         }
+        return remove;
     }
 
     synchronized void waitUntilInitialized() {

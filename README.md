@@ -60,6 +60,7 @@ There are two dependencies:
 both written by BFO, included in the "lib" folder and will be built into the generated Jars. Building is as simple as running `ant`. Two Jars
 are created:
 * `netkeystore-client-2.0.jar` contains the Provider for use as a Java KeyStore
+* `netkeystore-client-nozeroconf-2.0.jar` is as above, but doesn't support Zeroconf discovery (for environments that don't use it)
 * `netkeystore-server-2.0.jar` contains a Main class which starts a web-server and acts as the server implementation.
 
 The current release can be downloaded from 

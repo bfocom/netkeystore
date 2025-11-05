@@ -8,7 +8,8 @@
   <property name="classes.main" value="build/main"/>	<!-- where to compile the classes -->
   <property name="docs" value="docs"/>
   <property name="src.main" value="src/main/java"/>
-  <property name="jar.client" value="${dist}/netkeystore-client-${version}.jar"/>
+  <property name="jar.client-zc" value="${dist}/netkeystore-client-${version}.jar"/>
+  <property name="jar.client-nozc" value="${dist}/netkeystore-client-nozeroconf-${version}.jar"/>
   <property name="jar.server" value="${dist}/netkeystore-server-${version}.jar"/>
 
   <path id="path.build">
@@ -45,10 +46,26 @@
         <exclude name="**/*.java"/>
       </fileset>
     </copy>
-    <jar jarfile="${jar.client}" update="false">
+    <jar jarfile="${jar.client-zc}" update="false">
       <fileset dir="${classes.main}/client" />
       <zipgroupfileset file="lib/bfojson-2.0.jar"/>
       <zipgroupfileset file="lib/zeroconf-1.0.2.jar"/>
+      <manifest>
+        <attribute name="Build-By" value="${user.name}/${java.version}"/>
+        <attribute name="Build-Host" value="${hostname}"/>
+        <attribute name="Implementation-Title" value="${ant.project.name}"/>
+        <attribute name="Implementation-Version" value="${version}"/>
+        <attribute name="Sealed" value="true"/>
+        <attribute name="Index" value="true"/>
+        <attribute name="Permissions" value="all-permissions"/>
+        <attribute name="Codebase" value="*"/>
+        <attribute name="Caller-Allowable-Codebase" value="*"/>
+        <attribute name="Application-Library-Allowable-Codebase" value="*"/>
+      </manifest>
+    </jar>
+    <jar jarfile="${jar.client-nozc}" update="false">
+      <fileset dir="${classes.main}/client" />
+      <zipgroupfileset file="lib/bfojson-2.0.jar"/>
       <manifest>
         <attribute name="Build-By" value="${user.name}/${java.version}"/>
         <attribute name="Build-Host" value="${hostname}"/>
