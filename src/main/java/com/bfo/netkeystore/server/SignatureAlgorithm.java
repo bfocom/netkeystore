@@ -127,6 +127,24 @@ class SignatureAlgorithm {
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.12", "EC", "SHA3-512", "SHA3-512withECDSA"));
         register(new SignatureAlgorithm("1.3.101.112", "EdDSA", "SHA-512", "Ed25519"));
         register(new SignatureAlgorithm("1.3.101.113", "EdDSA", "SHAKE256", "Ed448"));
+
+        // NOTE that supporting an algorithm requires being able to split the hashing and signing steps;
+        // the hashing is done on the client, the signing is done on the server. The
+        // "signingAlgorithmWithExternalDigest" method is the stopper here, and is the reason why we
+        // can't support Edwards Curve and ML-DSA in core Java. Could it be possible?
+        //
+        // * ML-DSA uses SHAKE256 internally. The supplied hash would need to be SHAKE256(SHAKE256(publickey, 64) + message, 64).
+        //   Yes, possible with a reimplementation of ML-DSA to allow this value to be passed in.
+        //   @see FIP204 value of "tr" property, defined as H(publickey).
+        //   @see https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/provider/ML_DSA.java
+        //
+        // * EdDSA is more complex; for Ed25519 the hash is SHA512(R||Q||M) where M is the message and R is derived from the private key.
+        //   So it can't be supported remotely with the current architecture of CSC; would require multiple passes to exchange info, and
+        //   this may well leak private data. Will never happen.
+        //
+        // * SLH-DSA hash is H(R||PK||M) where R is derived from the private key and the message. So as with EcDSA, not going to work.
+        //
+        // On hardware keys, forget it.
     }
 
 }
