@@ -48,7 +48,7 @@
     </copy>
     <jar jarfile="${jar.client-zc}" update="false">
       <fileset dir="${classes.main}/client" />
-      <zipgroupfileset file="lib/bfojson-2.0.jar"/>
+      <zipgroupfileset file="lib/bfojson-2.1.jar"/>
       <zipgroupfileset file="lib/zeroconf-1.0.2.jar"/>
       <manifest>
         <attribute name="Build-By" value="${user.name}/${java.version}"/>
@@ -65,7 +65,7 @@
     </jar>
     <jar jarfile="${jar.client-nozc}" update="false">
       <fileset dir="${classes.main}/client" />
-      <zipgroupfileset file="lib/bfojson-2.0.jar"/>
+      <zipgroupfileset file="lib/bfojson-2.1.jar"/>
       <manifest>
         <attribute name="Build-By" value="${user.name}/${java.version}"/>
         <attribute name="Build-Host" value="${hostname}"/>
@@ -98,7 +98,7 @@
     </copy>
     <jar jarfile="${jar.server}" update="false">
       <fileset dir="${classes.main}/server" />
-      <zipgroupfileset file="lib/bfojson-2.0.jar"/>
+      <zipgroupfileset file="lib/bfojson-2.1.jar"/>
       <zipgroupfileset file="lib/zeroconf-1.0.2.jar"/>
       <manifest>
         <attribute name="Build-By" value="${user.name}/${java.version}"/>
