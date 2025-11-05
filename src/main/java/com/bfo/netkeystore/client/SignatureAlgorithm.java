@@ -19,7 +19,10 @@ public class SignatureAlgorithm {
         this.oid = oid;
         this.keyAlgorithm = keyAlgorithm;
         this.digestAlgorithm = digestAlgorithm;
-        this.names = Collections.<String>unmodifiableList(Arrays.asList(names));
+        List<String> l = new ArrayList<String>(names.length + 1);
+        l.add(oid);
+        l.addAll(Arrays.asList(names));
+        this.names = Collections.<String>unmodifiableList(l);
     }
 
     /**
@@ -78,9 +81,12 @@ public class SignatureAlgorithm {
     public String signingAlgorithmWithExternalDigest() {
         String ka = keyAlgorithm();
         if ("EC".equals(ka)) {
-            ka = "ECDSA";
+            return "NONEwithECDSA";
+        } else if ("ECDSA".equals(ka) || "RSA".equals(ka)) {
+            return "NONEwith" + ka;
+        } else {
+            return name();
         }
-        return "NONEwith" + ka;
     }
 
     /**
@@ -173,8 +179,11 @@ public class SignatureAlgorithm {
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.10", "EC", "SHA3-256", "SHA3-256withECDSA"));
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.11", "EC", "SHA3-384", "SHA3-384withECDSA"));
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.12", "EC", "SHA3-512", "SHA3-512withECDSA"));
-        register(new SignatureAlgorithm("1.3.101.112", "EdDSA", "SHA-512", "Ed25519"));
-        register(new SignatureAlgorithm("1.3.101.113", "EdDSA", "SHAKE256", "Ed448"));
+        register(new SignatureAlgorithm("1.3.101.112", "EdDSA", null, "Ed25519"));
+        register(new SignatureAlgorithm("1.3.101.113", "EdDSA", null, "Ed448"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.17", "ML-DSA", null, "ML-DSA-44"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.18", "ML-DSA", null, "ML-DSA-65"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.19", "ML-DSA", null, "ML-DSA-87"));
     }
 
 }

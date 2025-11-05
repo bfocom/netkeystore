@@ -2,6 +2,7 @@ package com.bfo.netkeystore.client;
 
 import java.io.*;
 import java.nio.*;
+import java.util.*;
 import java.security.*;
 import java.security.spec.*;
 import java.util.concurrent.*;
@@ -12,6 +13,7 @@ import com.bfo.json.*;
  */
 public class NetSignatureSpi extends SignatureSpi {
 
+    private static final int INIT_PSEUDO_LENGTH = 512;  // More than enough for any hash algorithm
     private final NetProvider provider;
     private final Core core;
     private final SignatureAlgorithm algo;
@@ -19,7 +21,8 @@ public class NetSignatureSpi extends SignatureSpi {
     private AlgorithmParameters params;
     private Signature verifySignature;
     private MessageDigest digest;
-    private ByteBuffer noneDigest;
+    private byte[] pseudoDigest;
+    private int pseudoDigestLength;
 
     NetSignatureSpi(Provider.Service service) throws NoSuchAlgorithmException {
         this.provider = (NetProvider)service.getProvider();
@@ -31,7 +34,7 @@ public class NetSignatureSpi extends SignatureSpi {
         }
         algoName = algo.name();
         this.digest = algo.digestAlgorithm() == null ? null : MessageDigest.getInstance(algo.digestAlgorithm());
-        this.noneDigest = digest == null ? null : ByteBuffer.allocate(512);
+        this.pseudoDigest = new byte[INIT_PSEUDO_LENGTH];
         for (Provider provider : Security.getProviders()) {
             if (!(provider instanceof NetProvider)) {
                 try {
@@ -74,11 +77,14 @@ public class NetSignatureSpi extends SignatureSpi {
         if (this.digest != null) {
             this.digest.reset();
         } else {
-            this.noneDigest.clear();
+            pseudoDigestLength = 0;
         }
     }
 
     @Override protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+        if (verifySignature == null) {
+            throw new InvalidKeyException("Unable to verify signature with algorithm \"" + publicKey.getAlgorithm() + "\", no local implementation");
+        }
         if (core.isDebug("trace")) core.debug("trace", "SignatureSpi.engineInitVerify(" + publicKey + ")");
         this.verifySignature.initVerify(publicKey);
         this.privateKey = null;
@@ -112,8 +118,9 @@ public class NetSignatureSpi extends SignatureSpi {
             verifySignature.update(b);
         } else if (digest != null) {
             digest.update(b);
-        } else if (noneDigest != null) {
-            noneDigest.put(b);
+        } else if (pseudoDigest != null) {
+            expandPseudoDigest(1);
+            pseudoDigest[pseudoDigestLength++] = b;
         } else {
             throw new SignatureException("Not initialized");
         }
@@ -125,8 +132,10 @@ public class NetSignatureSpi extends SignatureSpi {
             verifySignature.update(b, off, len);
         } else if (digest != null) {
             digest.update(b, off, len);
-        } else if (noneDigest != null) {
-            noneDigest.put(b, off, len);
+        } else if (pseudoDigest != null) {
+            expandPseudoDigest(len);
+            System.arraycopy(b, off, pseudoDigest, pseudoDigestLength, len);
+            pseudoDigestLength += len;
         } else {
             throw new SignatureException("Not initialized");
         }
@@ -142,10 +151,19 @@ public class NetSignatureSpi extends SignatureSpi {
             }
         } else if (digest != null) {
             digest.update(input);
-        } else if (noneDigest != null) {
-            noneDigest.put(input);
+        } else if (pseudoDigest != null) {
+            int len = input.remaining();
+            expandPseudoDigest(len);
+            input.get(pseudoDigest, pseudoDigestLength, len);
+            pseudoDigestLength += len;
         } else {
             throw new IllegalStateException("Not initialized");
+        }
+    }
+
+    private void expandPseudoDigest(int len) {
+        if (pseudoDigestLength + len > pseudoDigest.length) {
+            pseudoDigest = Arrays.copyOf(pseudoDigest, Math.max(pseudoDigestLength + len, pseudoDigest.length + (pseudoDigest.length >> 1)));
         }
     }
 
@@ -173,9 +191,9 @@ public class NetSignatureSpi extends SignatureSpi {
             if (digest != null) {
                 data = digest.digest();
             } else {
-                data = new byte[noneDigest.position()];
-                noneDigest.flip();
-                noneDigest.get(data);
+                data = Arrays.copyOf(pseudoDigest, pseudoDigestLength);
+                pseudoDigest = new byte[INIT_PSEUDO_LENGTH];
+                pseudoDigestLength = 0;
             }
             return server.sign(privateKey, algo, params, data);
         } catch (UnrecoverableKeyException e) {

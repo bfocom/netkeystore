@@ -457,6 +457,9 @@ class CSCServer implements Server {
                             if (json.get("cert").size() == 0) {
                                 json.remove("cert");
                             }
+                            // Supported keys have known types (RSA, ECDSA) etc defined in Java standard names.
+                            // Unsupported types (eg ML-DSA on older VMs) will only have an OID, and will crash if they don't match.
+                            keyAlg = certs[0].getPublicKey().getAlgorithm();
                             PrivateKey key = new NetPrivateKey(core, this, kid, keyAlg, json);
                             core.addKey(this, kid, new KeyStore.PrivateKeyEntry(key, certs));
                         } else {

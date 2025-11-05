@@ -16,7 +16,10 @@ class SignatureAlgorithm {
         this.oid = oid;
         this.keyAlgorithm = keyAlgorithm;
         this.digestAlgorithm = digestAlgorithm;
-        this.names = Collections.<String>unmodifiableList(Arrays.asList(names));
+        List<String> l = new ArrayList<String>(names.length + 1);
+        l.add(oid);
+        l.addAll(Arrays.asList(names));
+        this.names = Collections.<String>unmodifiableList(l);
     }
 
     public boolean isName(String name) {
@@ -49,9 +52,12 @@ class SignatureAlgorithm {
     public String signingAlgorithmWithExternalDigest() {
         String ka = keyAlgorithm();
         if ("EC".equals(ka)) {
-            ka = "ECDSA";
+            return "NONEwithECDSA";
+        } else if ("ECDSA".equals(ka) || "RSA".equals(ka)) {
+            return "NONEwith" + ka;
+        } else {
+            return name();
         }
-        return "NONEwith" + ka;
     }
 
     public Class<? extends AlgorithmParameterSpec> signingAlgorithmParameterClass() {
@@ -66,8 +72,8 @@ class SignatureAlgorithm {
         return Collections.<SignatureAlgorithm>unmodifiableCollection(REGISTRY.values());
     }
 
-    public static SignatureAlgorithm get(String s) {
-        return REGISTRY.get(s);
+    public static SignatureAlgorithm get(String name) {
+        return REGISTRY.get(name);
     }
 
     public String toString() {
@@ -125,26 +131,55 @@ class SignatureAlgorithm {
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.10", "EC", "SHA3-256", "SHA3-256withECDSA"));
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.11", "EC", "SHA3-384", "SHA3-384withECDSA"));
         register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.12", "EC", "SHA3-512", "SHA3-512withECDSA"));
-        register(new SignatureAlgorithm("1.3.101.112", "EdDSA", "SHA-512", "Ed25519"));
-        register(new SignatureAlgorithm("1.3.101.113", "EdDSA", "SHAKE256", "Ed448"));
+        register(new SignatureAlgorithm("1.3.101.112", "EdDSA", null, "Ed25519"));
+        register(new SignatureAlgorithm("1.3.101.113", "EdDSA", null, "Ed448"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.17", "ML-DSA", null, "ML-DSA-44"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.18", "ML-DSA", null, "ML-DSA-65"));
+        register(new SignatureAlgorithm("2.16.840.1.101.3.4.3.19", "ML-DSA", null, "ML-DSA-87"));
 
-        // NOTE that supporting an algorithm requires being able to split the hashing and signing steps;
-        // the hashing is done on the client, the signing is done on the server. The
-        // "signingAlgorithmWithExternalDigest" method is the stopper here, and is the reason why we
-        // can't support Edwards Curve and ML-DSA in core Java. Could it be possible?
+        // Notes on new algorithms
         //
-        // * ML-DSA uses SHAKE256 internally. The supplied hash would need to be SHAKE256(SHAKE256(publickey, 64) + message, 64).
+        // Conceptually, all signatures work on a hash of the message. For RSA/EC algorithms that
+        // hash is done first in one stage, then the signature applied to the hash in a second stage.
+        // CSC is designed with those algorithms in mind.
+        //
+        // More modern algorithms (EdDSA, MLDSA, SLH-DSA) combine the hash and sign operation into one.
+        // While there are "pre-hashed" variations of EcDSA and MLDSA at least, they use different OIDs
+        // and are neither compatible nor loved, and they also don't solve the problem: they're intended
+        // to avoid having to hash a message twice on HSM devices with limited capacity. They don't let
+        // you just pass in a hash of the data.
+        //
+        // We can support algorithms that combine hashiing and signing, , but only by passing ALL the data
+        // that needs signing from the client to the server. While this sounds like a terrible idea there
+        // are some common uses (eg PKCS#7) where that data is already a hash, so it's not a big deal.
+        //
+        // Another option would be doing some magic, calculating whatever hash is used by each algorithm on
+        // the client, in whatever way is required by each algorithm, then slotting it in at the correct
+        // stage on the server. But there are several problems with this:
+        //
+        // 1. The Java algorithms don't expose anough code to allow this type of approach.
+        // 2. While we could rewrite them, it's not going to work with HSMs, which is mostly the point of this API
+        // 3. Some of the hash algorithms use private data from the key as an input, so we couldn't even do it
+        //    in software.
+        //
+        // Our only solution: support those algorithms (effectively they work like "NONEwithRSA", the client just
+        // sends whatever was given to the signature.update method). But document that we're passing the data
+        // across directly.
+        // 
+        //
+        // For posterity here are some notes on investigating option 3
+        //
+        // * ML-DSA uses SHAKE256. The hash would need to be SHAKE256(SHAKE256(publickey, 64) + message, 64).
         //   Yes, possible with a reimplementation of ML-DSA to allow this value to be passed in.
         //   @see FIP204 value of "tr" property, defined as H(publickey).
         //   @see https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/provider/ML_DSA.java
         //
-        // * EdDSA is more complex; for Ed25519 the hash is SHA512(R||Q||M) where M is the message and R is derived from the private key.
-        //   So it can't be supported remotely with the current architecture of CSC; would require multiple passes to exchange info, and
-        //   this may well leak private data. Will never happen.
+        // * EdDSA is more complex; for Ed25519 the hash is SHA512(R||Q||M) where M is the message and R is
+        //   derived from the private key. So it can't be supported remotely with the current architecture of CSC; would
+        //   require multiple passes to exchange info, and this may well leak private data. Will never happen.
         //
-        // * SLH-DSA hash is H(R||PK||M) where R is derived from the private key and the message. So as with EcDSA, not going to work.
+        // * SLH-DSA hash is H(R||PK||M) where R is derived from private key and message. As with EcDSA, not going to work.
         //
-        // On hardware keys, forget it.
     }
 
 }

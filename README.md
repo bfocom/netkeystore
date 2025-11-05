@@ -47,11 +47,20 @@ Features:
   * Supports "external", "basic" and "oauth2" authorization (which proxies to a third-party OAuth2 provider)
   * Server supports HTTP and HTTPS
   * JWT based tokens
-  * EC and RSA keys
+  * Supports EC, RSA, EdDSA (requires Java 15+) and ML-DSA (requires Java 24+) key algorithms.
   * Explicit, implicit passwords supported. OTP passwords supported, with a sample implementation.
   * Designed for extension and to accommodate CSC API v2
 * Supports announcing service over Zeroconf, for no-configuration setup with compatible clients.
 
+
+## A quick word on key algorithms.
+EC and RSA signatures are done in two stages: hash then sign, which makes them easy to adapt to network signing: hash on the client,
+sign on the server. For EdDSA and ML-DSA signatures the hashing and signing are more integrated and can't be separated.
+When those algorithms are used, *all the bytes* passed into `Signature.update()` are stored and sent to the server.
+For many common scenarios (eg use within a pkcs-signedData) what you're signing is already a hash, so this isn't necessarily a problem.
+The same applies to the algorithms `NONEwithRSA` and `NONEwithECDSA`.
+
+Signing happens on the server, so it is perfectly possible to sign using algorithms not supported by the client: eg ML-DSA under Java 11.
 
 ## Building and testing
 
